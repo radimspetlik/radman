@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block sidebar %}
+<p><a href="{{ url_for('admin_menu') }}">Manage Menu Items</a> |
+<a href="{{ url_for('admin_static_pages') }}">Manage Static Pages</a></p>
+  <h3>Admin - Menu</h3>
+  <p><a href="{{ url_for('admin_new_menu_item') }}">[+ Add New Menu Item]</a></p>
+
+  <hr/>
+  <p>Full Site Menu:</p>
+  {% include "menu_tree_admin.html" with context %}
+{% endblock %}
+{% block content %}
+  <h2>Menu Administration</h2>
+  <p>Use links on the left side to add, edit, or delete menu items.</p>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "layout.html" %}
+{% block sidebar %}
+  <h3>Admin - Edit Menu Item</h3>
+{% endblock %}
+{% block content %}
+  <h2>{{ item and "Edit Menu Item" or "New Menu Item" }}</h2>
+  <form action="{{ form_action }}" method="POST">
+    <p>
+      <label>Title:</label>
+      <input type="text" name="title" value="{{ item and item.Title or '' }}" />
+    </p>
+    <p>
+      <label>Parent:</label>
+      <select name="parent_id">
+        <option value="">(no parent)</option>
+        {% for mid, entity in by_id.items() %}
+          {% if mid != (item and item.RowKey) %} 
+            {# Don't allow item to be its own parent #}
+            <option value="{{ mid }}" {% if item and entity.RowKey == item.ParentRowKey %}selected{% endif %}>
+              {{ entity.Title }}
+            </option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </p>
+    <p>
+      <label>Type:</label>
+      <select name="type" id="menu_item_type">
+        <option value="static" {% if item and item.Type == 'static' %}selected{% endif %}>Static Page</option>
+        <option value="graph"  {% if item and item.Type == 'graph' %}selected{% endif %}>Graph</option>
+        <option value="link"   {% if item and item.Type == 'link'  %}selected{% endif %}>Link to Another Menu Item</option>
+      </select>
+    </p>
+    <div id="link_rowkey_container" style="display: none;">
+      <label>Link Target Menu Item:</label>
+      <select name="link_row_key">
+        <option value="">(none)</option>
+        {% for mid, entity in by_id.items() %}
+          <option value="{{ mid }}" {% if item and item.LinkRowKey == mid %}selected{% endif %}>
+            {{ entity.Title }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <p>
+      <button type="submit">Save</button>
+    </p>
+  </form>
+  <script>
+  // Show/hide the link target field if type=link
+  let selectType = document.getElementById("menu_item_type");
+  let linkContainer = document.getElementById("link_rowkey_container");
+
+  function updateLinkField() {
+    if (selectType.value === "link") {
+      linkContainer.style.display = "block";
+    } else {
+      linkContainer.style.display = "none";
+    }
+  }
+
+  selectType.addEventListener("change", updateLinkField);
+  // On load
+  updateLinkField();
+  </script>
+{% endblock %}

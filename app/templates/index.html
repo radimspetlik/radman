@@ -1,0 +1,11 @@
+{% extends "layout.html" %}
+{% block sidebar %}
+  {# Re-use the partial rendering of the menu tree #}
+  {% include "menu_tree.html" with context %}
+{% endblock %}
+{% block content %}
+  <h2>Home Page</h2>
+  <div>
+    {{ content_html|safe }}
+  </div>
+{% endblock %}

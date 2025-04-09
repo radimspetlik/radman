@@ -1,0 +1,10 @@
+.idea
+data
+__pycache__
+.pytest_cache
+
+data-dev.sqlite
+jobs.sqlite
+cache
+*.pdf
+*.pdf_tex

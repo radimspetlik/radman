@@ -1,0 +1,63 @@
+image: "python:3.8-slim"
+
+default:
+  tags:
+    - docker
+
+variables:
+  IMAGE_NAME: mamrakovinucz
+
+before_script:
+  - apt-get update
+  - apt-get install -y build-essential
+  - python --version
+  - python -m pip install --upgrade pip
+  - pip install pipenv
+  - mkdir .venv
+  - pipenv install --deploy --dev
+  - source .venv/bin/activate
+
+stages:
+  - static analysis
+  - test
+  - build
+
+flake8:
+  stage: static analysis
+  script:
+    - flake8 ./app --config=flake.config
+  only: [ 'master', 'merge_requests' ]
+
+pylint:
+  stage: static analysis
+  script:
+    - pylint ./app --rcfile=.pylintrc
+  only: [ 'master', 'merge_requests' ]
+
+pytest:
+  stage: test
+  script:
+    - pytest --cov=./app --cov-report=term --cov-report=xml --junitxml=report.xml
+  only: ['master', 'merge_requests']
+  artifacts:
+    when: always
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+      junit: report.xml
+
+docker_build_x64:
+  image:
+    name: docker:stable
+  stage: build
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -t ${IMAGE_NAME} .
+    - docker tag ${IMAGE_NAME} ${CI_REGISTRY}/${CI_PROJECT_PATH}/${IMAGE_NAME}
+    - docker push ${CI_REGISTRY}/${CI_PROJECT_PATH}/${IMAGE_NAME}
+  only:
+    - main

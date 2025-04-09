@@ -1,0 +1,37 @@
+[Unit]
+Description=Service Admin service
+After=docker.service
+Requires=docker.service mysql-docker.service
+
+[Service]
+TimeoutStartSec=300
+Environment=NAME=service-admin TAG=latest
+ExecStartPre=/bin/sleep 1
+ExecStartPre=-/usr/bin/docker stop ${NAME}
+ExecStartPre=-/usr/bin/docker rm -f ${NAME}
+ExecStartPre=-/usr/bin/docker pull registry.gitlab.com/mamrakovinucz/mamrakovinucz/${NAME}:${TAG}
+ExecStart=/usr/bin/docker run \
+	 --rm \
+    --name=${NAME} \
+    --link mysql \
+    -v /etc/localtime:/etc/localtime:ro \
+    -v /etc/timezone:/etc/timezone:ro \
+    -v /home/radim/data/:/home/radim/data/ \
+    -v /var/run:/var/run \
+    -v /var/log:/var/log \
+    -e MYSQL_SERVER_ADDRESS=mysql \
+    -e PRODUCTION_ACCOUNT_KEY=!!! \
+    -e PRODUCTION_ACCOUNT_NAME=!!! \
+    -e MYSQL_USERNAME=!!! \
+    -e MYSQL_PASSWORD=!!! \
+    -e MYSQL_TABLE=!!! \
+    -e MYSQL_SERVER_PORT=3306 \
+	registry.gitlab.com/mamrakovinucz/mamrakovinucz/${NAME}:${TAG}
+ExecStartPost=/bin/sleep 15
+ExecStartPost=-/usr/bin/docker exec ${NAME} chown root:www-data /var/run/service-admin.sock
+ExecStartPost=-/usr/bin/docker exec ${NAME} chown root:www-data /var/log/service-admin.log
+ExecStop=/usr/bin/docker stop ${NAME}
+ExecReload=/usr/bin/docker restart ${NAME}
+
+[Install]
+WantedBy=multi-user.target

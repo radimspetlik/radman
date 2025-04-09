@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8"/>
+    <title>My Flask Azure App</title>
+    <style>
+      /* Simple layout with left menu and right content */
+      body {
+        font-family: Arial, sans-serif;
+      }
+      .container {
+        display: flex;
+        flex-direction: row;
+        height: 100vh;
+      }
+      .sidebar {
+        width: 250px;
+        padding: 10px;
+        background: #f4f4f4;
+        overflow-y: auto;
+      }
+      .content {
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+      }
+      .menu-item {
+        margin-left: 20px;
+      }
+      .flash {
+        background-color: #ffc;
+        border: 1px solid #cc9;
+        padding: 5px;
+        margin: 5px 0;
+      }
+    </style>
+  </head>
+  <body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="flash">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <div class="container">
+      <div class="sidebar">
+        <h3>Menu</h3>
+        <ul>
+          {% block sidebar %}{% endblock %}
+        </ul>
+        <hr/>
+        <a href="{{ url_for('admin_menu') }}">Admin</a>
+      </div>
+      <div class="content">
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </body>
+</html>

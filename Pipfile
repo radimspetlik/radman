@@ -1,0 +1,39 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+click = "==7.1.2"
+Flask = "==2.0.3"
+Flask-Login = "*"
+Flask-WTF = "*"
+gunicorn = "*"
+itsdangerous = "*"
+Jinja2 = "==3.1.2"
+llconfig = "*"
+MarkupSafe = "*"
+numpy = "*"
+pygal = "*"
+Pillow = "*"
+pytz = "*"
+six = "*"
+tqdm = "*"
+tzlocal = "*"
+Werkzeug = "==2.2.3"
+WTForms = "*"
+azure-data-tables = "*"
+azure-servicebus = "*"
+azure-storage-blob = "*"
+azure-storage-queue = "*"
+pyyaml = "*"
+matplotlib = "*"
+
+[dev-packages]
+pylint = "==2.9.3"
+flake8 = "==3.9.2"
+pytest = "==6.2.4"
+pytest-cov = "==2.12.1"
+
+[requires]
+python_version = "3.8"
