@@ -26,19 +26,19 @@ flake8:
   stage: static analysis
   script:
     - flake8 ./app --config=flake.config
-  only: [ 'master', 'merge_requests' ]
+  only: [ 'main', 'merge_requests' ]
 
 pylint:
   stage: static analysis
   script:
     - pylint ./app --rcfile=.pylintrc
-  only: [ 'master', 'merge_requests' ]
+  only: [ 'main', 'merge_requests' ]
 
 pytest:
   stage: test
   script:
     - pytest --cov=./app --cov-report=term --cov-report=xml --junitxml=report.xml
-  only: ['master', 'merge_requests']
+  only: ['main', 'merge_requests']
   artifacts:
     when: always
     reports:
@@ -60,4 +60,4 @@ docker_build_x64:
     - docker tag ${IMAGE_NAME} ${CI_REGISTRY}/${CI_PROJECT_PATH}/${IMAGE_NAME}
     - docker push ${CI_REGISTRY}/${CI_PROJECT_PATH}/${IMAGE_NAME}
   only:
-    - main
+    - master
