@@ -2,7 +2,7 @@ image: "python:3.8-slim"
 
 default:
   tags:
-    - docker
+    - gitlab-org-docker
 
 variables:
   IMAGE_NAME: mamrakovinucz
