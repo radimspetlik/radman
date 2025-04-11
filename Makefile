@@ -5,7 +5,7 @@ BLUE="\033[0;34m"
 RC="\033[0m"
 NL="\n"
 
-IMAGE := registry.gitlab.cvut.cz/rasemailcz/mamrakovinucz/mamrakovinucz
+IMAGE := registry.gitlab.cvut.cz/rasemailcz/radman/radman
 PWD := $(shell pwd)
 
 

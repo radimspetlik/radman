@@ -5,7 +5,7 @@ default:
     - gitlab-org-docker
 
 variables:
-  IMAGE_NAME: mamrakovinucz
+  IMAGE_NAME: radman
 
 before_script:
   - apt-get update

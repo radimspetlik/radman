@@ -1,7 +1,7 @@
-# mamrakovinucz
+# radman
 
-[![pipeline status](https://gitlab.fel.cvut.cz/spetlrad/mamrakovinucz/badges/master/pipeline.svg)](https://gitlab.fel.cvut.cz/spetlrad/mamrakovinucz/-/commits/master)
-[![coverage report](https://gitlab.fel.cvut.cz/spetlrad/mamrakovinucz/badges/master/coverage.svg)](https://gitlab.fel.cvut.cz/spetlrad/mamrakovinucz/-/commits/master)
+[![pipeline status](https://gitlab.fel.cvut.cz/spetlrad/radman/badges/master/pipeline.svg)](https://gitlab.fel.cvut.cz/spetlrad/radman/-/commits/master)
+[![coverage report](https://gitlab.fel.cvut.cz/spetlrad/radman/badges/master/coverage.svg)](https://gitlab.fel.cvut.cz/spetlrad/radman/-/commits/master)
 
 
 # Project Setup
@@ -12,21 +12,21 @@ Our Gunicorn application server should now be up and running, waiting for reques
 
 Begin by creating a new server block configuration file in Nginx's sites-available directory. We'll simply call this flaskproject to keep in line with the rest of the article:
 
-`$ sudo nano /etc/nginx/sites-available/mamrakovinucz`
+`$ sudo nano /etc/nginx/sites-available/radman`
 
 Open up a server block and tell Nginx to listen on the default port 80. We also need to tell it to use this block for requests for our server's domain name or IP address.
 
 The only other thing that we need to add is a location block that matches every request. Within this block, we'll include the proxy_params file that specifies some general proxying parameters that need to be set. We'll then pass the requests to the socket we defined using the proxy_pass directive:
 
 ```
-/etc/nginx/sites-available/mamrakovinucz
+/etc/nginx/sites-available/radman
 server {
     listen 80;
     server_name server_domain_or_IP;
 
     location / {
         include proxy_params;
-        proxy_pass http://unix:/home/bobby/mamrakovinucz/mamrakovinucz.sock;
+        proxy_pass http://unix:/home/bobby/radman/radman.sock;
     }
 }
 ```
@@ -34,7 +34,7 @@ That's actually all we need to serve our application. Save and close the file wh
 
 To enable the Nginx server block configuration we've just created, link the file to the sites-enabled directory:
 
-`$ sudo ln -s /etc/nginx/sites-available/mamrakovinucz /etc/nginx/sites-enabled`
+`$ sudo ln -s /etc/nginx/sites-available/radman /etc/nginx/sites-enabled`
 With the file in that directory, we can test for syntax errors by typing:
 
 `$ sudo nginx -t`
@@ -71,30 +71,30 @@ Nejdrive je potreba ziskat access token to gitlab registry - `https://gitlab.com
 
 ### Spusteni
 
-- `docker run --rm --name=mamrakovinucz -p=5000:5000 registry.gitlab.com/mamrakovinucz:latest`
+- `docker run --rm --name=radman -p=5000:5000 registry.gitlab.com/radman:latest`
 - Note: `--restart unless-stopped` zpusobi automaticky start po rebootu
 
 ### Zastaveni
 
-- `docker stop mamrakovinucz`
+- `docker stop radman`
 
 ### Upgrade
 
-- `docker pull registry.gitlab.com/mamrakovinucz:latest`
+- `docker pull registry.gitlab.com/radman:latest`
 - zastavit pokud to bezi
 - spustit
 
 ## Ubuntu service
 
 ### Instalace
-- prekopirovat `mamrakovinucz.service` z rootu repozitare do `/etc/systemd/system/mamrakovinucz.service`
+- prekopirovat `radman.service` z rootu repozitare do `/etc/systemd/system/radman.service`
 - `sudo systemctl daemon-reload` - pro refresh systemd daemona (aby se ten novy soubor nacetl)
 
 ### Pouzivani
-- `sudo service mamrakovinucz start|stop|restart`
+- `sudo service radman start|stop|restart`
 
 ### Upgrade
 - staci udelat restart, ta ubuntu sluzba je napsana tak, ze zkousi udelat upgrade pred kazdym startem
 
 ### Automaticky start po rebootu
-- `sudo systemctl enable mamrakovinucz`
+- `sudo systemctl enable radman`
