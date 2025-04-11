@@ -1,13 +1,12 @@
 import os
-import uuid
-from flask import Flask, render_template, request, redirect, url_for, flash
-from azure.data.tables import TableEntity
+from flask import render_template, redirect, url_for
 
-from app.table_manager import get_table_manager
-from app.blob_manager import get_blob_manager
+from app.app_init import get_login_manager, get_app
 
-app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY")  # for flashing messages, sessions, etc.
+app = get_app(__name__)
+
+login_manager = get_login_manager()
+
 
 # We assume these environment variables are set:
 #   STORAGE_ACCOUNT_NAME, STORAGE_ACCOUNT_KEY
@@ -17,7 +16,7 @@ app.secret_key = os.environ.get("SECRET_KEY")  # for flashing messages, sessions
 
 @app.route("/")
 def root():
-    return render_template("index.html")
+    return redirect(url_for("user.login"))
 
 
 # ----------------------------------------------------------------

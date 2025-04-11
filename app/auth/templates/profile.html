@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+{% block content %}
+  <h2>Update Profile</h2>
+  <form method="POST" action="{{ url_for('user.profile') }}">
+    <div>
+      <label for="email">New Email:</label>
+      <input type="email" name="email" id="email" value="{{ user.email }}">
+    </div>
+    <div>
+      <label for="password">New Password:</label>
+      <input type="password" name="password" id="password">
+    </div>
+    <button type="submit">Update Profile</button>
+  </form>
+{% endblock %}
