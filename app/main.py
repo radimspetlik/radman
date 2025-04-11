@@ -3,7 +3,7 @@ from flask import render_template, redirect, url_for
 
 from app.app_init import get_login_manager, get_app
 
-app = get_app(__name__)
+flask_app = get_app(__name__)
 
 login_manager = get_login_manager()
 
@@ -14,7 +14,7 @@ login_manager = get_login_manager()
 # Or you adapt them accordingly for your environment.
 
 
-@app.route("/")
+@flask_app.route("/")
 def root():
     return redirect(url_for("user.login"))
 
@@ -25,4 +25,4 @@ def root():
 if __name__ == "__main__":
     # Typical run. In production, you'd use gunicorn or similar.
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    flask_app.run(host="0.0.0.0", port=port, debug=True)

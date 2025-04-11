@@ -13,11 +13,10 @@ RUN apt-get update \
     apt-utils \
     build-essential
 
-RUN pip3 install --upgrade pip setuptools
+RUN pip3 install --upgrade pip setuptools wheel
 RUN pip3 install pipenv
 
-#COPY Pipfile Pipfile.lock ./
-COPY Pipfile ./
+COPY Pipfile Pipfile.lock ./
 RUN pipenv install --system --deploy
 
 COPY app app
