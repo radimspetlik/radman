@@ -3,6 +3,7 @@ import os
 
 from cryptography.fernet import Fernet
 
+from app.radiopharmaceutical.radiopharmaceutical import radiopharm_bp
 from app.table_manager import get_table_manager
 
 SECRET = os.environ['SECRET_KEY']
@@ -23,6 +24,7 @@ def init_app(app):
     login_manager.init_app(app)
 
     app.register_blueprint(user_bp)
+    app.register_blueprint(radiopharm_bp, url_prefix="/radiopharm")
 
     table_manager = get_table_manager()
     try:
@@ -30,6 +32,11 @@ def init_app(app):
         app.logger.info("Azure table 'users' created or already exists.")
     except Exception as e:
         app.logger.error("Failed to create azure table 'users': %s", e)
+    try:
+        table_manager.create_table("pharmaceutical")
+        app.logger.info("Azure table 'pharmaceutical' created or already exists.")
+    except Exception as e:
+        app.logger.error("Failed to create azure table 'pharmaceutical': %s", e)
 
 def get_app(name):
     global _APP

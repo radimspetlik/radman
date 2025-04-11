@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Radiopharmaceutical Management{% endblock %}
+{% block content %}
+<h2>Manage Radiopharmaceuticals for {{ current_user.username }}</h2>
+<form method="POST" action="{{ url_for('radiopharm.manage') }}">
+  <div id="record-list">
+    <!-- Header Row -->
+    <div class="record-header">
+      <div class="cell pharmaceutical">Pharmaceutical</div>
+      <div class="cell available">Is available</div>
+      <div class="cell price">Price per 1GBq</div>
+      <div class="cell time-slot">Available at</div>
+      <div class="cell actions">Actions</div>
+    </div>
+
+    <!-- Data Rows -->
+    {% for record in records %}
+      <div class="record-row" data-index="{{ loop.index0 }}">
+        <div class="cell pharmaceutical">
+          {{ record.type }}
+          <!-- Hidden fields for type and row_key -->
+          <input type="hidden" name="records[{{ loop.index0 }}][type]" value="{{ record.type }}">
+          <input type="hidden" name="records[{{ loop.index0 }}][row_key]" value="{{ record.RowKey|default('') }}">
+        </div>
+
+        <div class="cell available">
+          <input type="checkbox" name="records[{{ loop.index0 }}][available]" value="true" {% if record.available %} checked {% endif %}>
+        </div>
+
+        <div class="cell price">
+          <input type="number" step="0.01" name="records[{{ loop.index0 }}][price]" value="{{ record.price }}">
+        </div>
+
+        <div class="cell time-slot">
+          <select name="records[{{ loop.index0 }}][time_slot]">
+            <!-- Options for time slots - generate from 6:00 to 17:00 in 30-minute intervals -->
+            <option value="anytime" {% if record.time_slot == "anytime" %} selected {% endif %}>anytime</option>
+            {% for hour in range(6, 17) %}
+              <option value="{{ "%d:00" % hour }}" {% if record.time_slot == ("%d:00" % hour) %} selected {% endif %}>
+                {{ "%d:00" % hour }}
+              </option>
+              <option value="{{ "%d:30" % hour }}" {% if record.time_slot == ("%d:30" % hour) %} selected {% endif %}>
+                {{ "%d:30" % hour }}
+              </option>
+            {% endfor %}
+            <option value="17:00" {% if record.time_slot == "17:00" %} selected {% endif %}>17:00</option>
+          </select>
+        </div>
+
+        <div class="cell actions">
+          <button type="button" class="record-duplicate">duplicate</button>
+          <button type="button" class="record-delete">X</button>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <button type="submit">Save</button>
+</form>
+
+<script>
+// Function to reindex each record's input names so that they remain sequential.
+function reindexRecords() {
+  const records = document.querySelectorAll('.record-row');
+  records.forEach((record, index) => {
+    record.setAttribute('data-index', index);
+    record.querySelectorAll('input, select').forEach((input) => {
+      const name = input.getAttribute('name');
+      if (name) {
+        const fieldMatch = name.match(/\[\d+\]\[(.+)\]/);
+        if (fieldMatch) {
+          const field = fieldMatch[1];
+          input.setAttribute('name', `records[${index}][${field}]`);
+        }
+      }
+    });
+  });
+}
+
+// Use event delegation on the container for both duplicate and delete actions.
+document.getElementById('record-list').addEventListener('click', function(e) {
+  // Check if the clicked element is a delete button.
+  if (e.target.classList.contains('record-delete')) {
+    const recordDiv = e.target.closest('.record-row');
+    // Get the radiopharmaceutical type from the hidden field.
+    const pharmType = recordDiv.querySelector('input[name$="[type]"]').value;
+    // Count all records for this type.
+    const allTypeRecords = document.querySelectorAll(`.record-row input[name$="[type]"][value="${pharmType}"]`);
+    if (allTypeRecords.length > 1) {
+      recordDiv.remove();
+      reindexRecords();
+    } else {
+      {#alert("Cannot delete the last entry for " + pharmType);#}
+    }
+  }
+  // Check if the clicked element is a duplicate button.
+  else if (e.target.classList.contains('record-duplicate')) {
+    const recordDiv = e.target.closest('.record-row');
+    const clone = recordDiv.cloneNode(true);
+    recordDiv.parentNode.insertBefore(clone, recordDiv.nextSibling);
+    reindexRecords();
+  }
+});
+</script>
+{% endblock %}

@@ -128,3 +128,57 @@ form[style="display:inline;"] {
 button {
   cursor: pointer;
 }
+
+/* Container styles */
+#record-list {
+  font-family: Arial, sans-serif;
+}
+
+/* Header and record rows use flexbox to keep each row in one line */
+.record-header,
+.record-row {
+  display: flex;
+  flex-wrap: nowrap;  /* Prevent wrapping, ensuring one-line rows */
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid #ccc;
+}
+
+/* Header row styling: visually distinct with a background and bolder text */
+.record-header {
+  background-color: #000000;
+  font-weight: bold;
+}
+
+/* Cell styling applies to both header and data rows */
+.cell {
+  flex: 1;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+}
+
+/* Allocate extra space to the Pharmaceutical column */
+.pharmaceutical {
+  flex: 2;
+}
+
+/* Right-align the Actions cell */
+.actions {
+  justify-content: flex-end;
+}
+
+/* Optional: Add some margin to form elements for spacing */
+.record-row input[type="checkbox"],
+.record-row input[type="number"],
+.record-row select {
+  margin-left: 5px;
+}
+
+.record-delete {
+    background-color: #990000; /* Red color for delete action */
+    cursor: pointer;
+}
+.record-delete:hover {
+    background-color: #ff0000; /* Darker red on hover */
+}
