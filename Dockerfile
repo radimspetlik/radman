@@ -18,7 +18,6 @@ RUN pip3 install pipenv
 
 COPY Pipfile Pipfile.lock ./
 RUN pipenv install --system --deploy
-RUN pip3 install MarkupSafe==3.0
 
 COPY app app
 COPY start.sh ./

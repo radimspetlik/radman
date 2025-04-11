@@ -24,7 +24,8 @@
         </div>
 
         <div class="cell available">
-          <input type="checkbox" name="records[{{ loop.index0 }}][available]" value="true" {% if record.available %} checked {% endif %}>
+          <input type="checkbox" name="records[{{ loop.index0 }}][available]" value="true"
+                 {% if record.available %} checked {% endif %}>
         </div>
 
         <div class="cell price">
@@ -33,13 +34,15 @@
 
         <div class="cell time-slot">
           <select name="records[{{ loop.index0 }}][time_slot]">
-            <!-- Options for time slots - generate from 6:00 to 17:00 in 30-minute intervals -->
+            <!-- Options for time slots -->
             <option value="anytime" {% if record.time_slot == "anytime" %} selected {% endif %}>anytime</option>
             {% for hour in range(6, 17) %}
-              <option value="{{ "%d:00" % hour }}" {% if record.time_slot == ("%d:00" % hour) %} selected {% endif %}>
+              <option value="{{ "%d:00" % hour }}"
+                      {% if record.time_slot == ("%d:00" % hour) %} selected {% endif %}>
                 {{ "%d:00" % hour }}
               </option>
-              <option value="{{ "%d:30" % hour }}" {% if record.time_slot == ("%d:30" % hour) %} selected {% endif %}>
+              <option value="{{ "%d:30" % hour }}"
+                      {% if record.time_slot == ("%d:30" % hour) %} selected {% endif %}>
                 {{ "%d:30" % hour }}
               </option>
             {% endfor %}
@@ -59,7 +62,6 @@
 </form>
 
 <script>
-// Function to reindex each record's input names so that they remain sequential.
 function reindexRecords() {
   const records = document.querySelectorAll('.record-row');
   records.forEach((record, index) => {
@@ -67,6 +69,7 @@ function reindexRecords() {
     record.querySelectorAll('input, select').forEach((input) => {
       const name = input.getAttribute('name');
       if (name) {
+        // Match something like records[3][price]
         const fieldMatch = name.match(/\[\d+\]\[(.+)\]/);
         if (fieldMatch) {
           const field = fieldMatch[1];
@@ -77,24 +80,27 @@ function reindexRecords() {
   });
 }
 
-// Use event delegation on the container for both duplicate and delete actions.
 document.getElementById('record-list').addEventListener('click', function(e) {
-  // Check if the clicked element is a delete button.
   if (e.target.classList.contains('record-delete')) {
     const recordDiv = e.target.closest('.record-row');
-    // Get the radiopharmaceutical type from the hidden field.
+    // If you want to forbid deleting the last row of a type, check how many remain:
     const pharmType = recordDiv.querySelector('input[name$="[type]"]').value;
-    // Count all records for this type.
-    const allTypeRecords = document.querySelectorAll(`.record-row input[name$="[type]"][value="${pharmType}"]`);
+    const allTypeRecords = document.querySelectorAll(
+      `.record-row input[name$="[type]"][value="${pharmType}"]`
+    );
+    // If you DO want to let them delete the last row:
+    // recordDiv.remove();
+    // reindexRecords();
+
+    // Or if you want to block the last row:
     if (allTypeRecords.length > 1) {
       recordDiv.remove();
       reindexRecords();
     } else {
-      {#alert("Cannot delete the last entry for " + pharmType);#}
+      alert("Cannot delete the last entry for " + pharmType);
     }
-  }
-  // Check if the clicked element is a duplicate button.
-  else if (e.target.classList.contains('record-duplicate')) {
+
+  } else if (e.target.classList.contains('record-duplicate')) {
     const recordDiv = e.target.closest('.record-row');
     const clone = recordDiv.cloneNode(true);
     recordDiv.parentNode.insertBefore(clone, recordDiv.nextSibling);
