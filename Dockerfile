@@ -16,7 +16,8 @@ RUN apt-get update \
 RUN pip3 install --upgrade pip setuptools
 RUN pip3 install pipenv
 
-COPY Pipfile Pipfile.lock ./
+#COPY Pipfile Pipfile.lock ./
+COPY Pipfile ./
 RUN pipenv install --system --deploy
 
 COPY app app

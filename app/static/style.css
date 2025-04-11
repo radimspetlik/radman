@@ -1,15 +1,15 @@
 /* Base styles */
 body {
   font-family: Arial, sans-serif;
-  background-color: #f5f5f5;
+  background-color: #121212; /* Dark background */
   margin: 0;
   padding: 0;
-  color: #333;
+  color: #e0e0e0; /* Light text for readability */
 }
 
 /* Navigation bar styling */
 nav {
-  background-color: #007bff;
+  background-color: #1a1a1a; /* Dark navigation background */
   padding: 10px 20px;
 }
 
@@ -25,7 +25,7 @@ nav ul li {
 }
 
 nav ul li a {
-  color: #fff;
+  color: #e0e0e0; /* Light text for nav links */
   text-decoration: none;
   font-weight: bold;
 }
@@ -39,9 +39,10 @@ nav ul li a:hover {
   max-width: 800px;
   margin: 20px auto;
   padding: 20px;
-  background-color: #fff;
+  background-color: #1e1e1e; /* Slightly lighter dark background for content */
   border-radius: 5px;
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5); /* Deeper shadow for a subtle lift effect */
+  color: #e0e0e0;
 }
 
 /* Headings */
@@ -65,15 +66,17 @@ form input[type="email"],
 form input[type="password"] {
   width: 100%;
   padding: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid #555; /* Darker border for inputs */
   border-radius: 3px;
   box-sizing: border-box;
+  background-color: #2c2c2c; /* Dark background for inputs */
+  color: #e0e0e0;
 }
 
 form button {
   width: 100%;
   padding: 10px;
-  background-color: #007bff;
+  background-color: #007bff; /* Retaining accent color for buttons */
   border: none;
   color: #fff;
   font-size: 16px;
@@ -89,9 +92,9 @@ form button:hover {
 .flashes {
   list-style-type: none;
   padding: 10px;
-  background-color: #ffdddd;
-  border: 1px solid #ff5c5c;
-  color: #a94442;
+  background-color: #5c1a1a; /* Dark red background for flash messages */
+  border: 1px solid #ff5c5c; /* Brighter red border to draw attention */
+  color: #ffdddd;
   margin: 10px auto;
   max-width: 800px;
   border-radius: 5px;
@@ -106,13 +109,14 @@ table {
 
 table th,
 table td {
-  border: 1px solid #ddd;
+  border: 1px solid #555; /* Dark border for table cells */
   padding: 8px;
 }
 
 table th {
-  background-color: #f2f2f2;
+  background-color: #2c2c2c; /* Dark header background */
   text-align: left;
+  color: #e0e0e0;
 }
 
 /* Inline forms for actions */
