@@ -1,12 +1,51 @@
 {% extends "base.html" %}
-
 {% block title %}PET Scanner Schedule Optimization{% endblock %}
-
 {% block content %}
   <h1>PET Scanner Schedule</h1>
 
   <p>The schedule runs from <strong>06:00</strong> to <strong>17:00</strong> and is divided into 10-minute blocks.</p>
 
+  <!-- New table showing procedure start times -->
+    <h2>Patient Procedure Start Times</h2>
+  <table border="1" cellspacing="0" cellpadding="2">
+    <thead>
+      <tr>
+        <th>Start Time</th>
+        <th>Surname</th>
+        <th>Name</th>
+        <th>Identification</th>
+        <th>Radioph.</th>
+        <th>Scheme</th>
+        <th>Dose (MBq)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for patient in patients %}
+        <tr>
+          <td>
+            {% if patient.start_time %}
+              {{ patient.start_time }}
+            {% else %}
+              N/A
+            {% endif %}
+          </td>
+          <td>{{ patient.Surname }}</td>
+          <td>{{ patient.GivenName }}</td>
+          <td>{{ patient.Identification }}</td>
+          <td>{{ patient.Radiopharmaceutical }}</td>
+          <td>{{ patient.Scheme }}</td>
+          <td>{{ patient.AdministeredDose }}</td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="7">No patients found.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Existing schedule table -->
+  <h2>Detailed Schedule</h2>
   <table border="1" cellspacing="0" cellpadding="2">
     <thead>
       <tr>

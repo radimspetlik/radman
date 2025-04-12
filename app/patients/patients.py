@@ -8,6 +8,7 @@ from app.table_manager import get_table_manager
 patients_bp = Blueprint('patients', __name__, template_folder='templates')
 fernet = get_fernet()
 
+
 @login_required
 @patients_bp.route('/patients', methods=['GET', 'POST'])
 def manage_patients():
@@ -20,6 +21,11 @@ def manage_patients():
     )
     dosing_scheme_by_rowkey = {scheme['RowKey']: scheme for scheme in dosing_schemes}
 
+    # Compute unique radiopharmaceuticals (those that are associated with a dosing scheme).
+    available_rads = sorted(
+        list({scheme.get('Radiopharmaceutical') for scheme in dosing_schemes if scheme.get('Radiopharmaceutical')})
+    )
+
     if request.method == 'POST':
         # Add a new patient.
         surname = request.form.get('surname')
@@ -31,6 +37,7 @@ def manage_patients():
             flash("Weight must be a number.", "error")
             return redirect(url_for('patients.manage_patients'))
 
+        # Retrieve the dosing scheme (selected from the filtered list).
         dosing_scheme_id = request.form.get('dosing_scheme')  # should be the RowKey
 
         # Retrieve the selected dosing scheme record.
@@ -83,7 +90,6 @@ def manage_patients():
             patient["GivenName"] = fernet.decrypt(patient["GivenName"].encode()).decode()
             patient["Identification"] = fernet.decrypt(patient["Identification"].encode()).decode()
         except Exception as e:
-            # Optionally log the error; here we mark fields as unavailable.
             patient["Surname"] = "Decryption Error"
             patient["GivenName"] = "Decryption Error"
             patient["Identification"] = "Decryption Error"
@@ -91,8 +97,10 @@ def manage_patients():
     dosing_schemes = sorted(dosing_schemes, key=lambda x: x['Name'])
     return render_template("patients.html",
                            dosing_schemes=dosing_schemes,
+                           available_radiopharmaceuticals=available_rads,
                            patients=patients_list,
                            dosing_scheme_by_rowkey=dosing_scheme_by_rowkey)
+
 
 @login_required
 @patients_bp.route('/patients/edit/<row_key>', methods=['GET', 'POST'])
@@ -119,6 +127,14 @@ def edit_patient(row_key):
     dosing_schemes = list(
         table_manager.query_entities(DOSING_SCHEMES_TABLE, f"PartitionKey eq '{user_id}'")
     )
+    # Compute unique radiopharmaceuticals.
+    available_rads = sorted(
+        list({scheme.get('Radiopharmaceutical') for scheme in dosing_schemes if scheme.get('Radiopharmaceutical')})
+    )
+    dosing_schemes = sorted(dosing_schemes, key=lambda x: x['Name'])
+    # Determine the radiopharmaceutical corresponding to the patient’s dosing scheme.
+    current_scheme = table_manager.get_entity(DOSING_SCHEMES_TABLE, user_id, patient.get('DosingSchemeID'))
+    current_rad = current_scheme.get('Radiopharmaceutical') if current_scheme else ""
 
     if request.method == 'POST':
         # Process the update.
@@ -165,8 +181,11 @@ def edit_patient(row_key):
         flash("Patient updated successfully.", "success")
         return redirect(url_for('patients.manage_patients'))
 
-    dosing_schemes = sorted(dosing_schemes, key=lambda x: x['Name'])
-    return render_template("edit_patient.html", patient=patient, dosing_schemes=dosing_schemes)
+    return render_template("edit_patient.html", patient=patient,
+                           dosing_schemes=dosing_schemes,
+                           available_radiopharmaceuticals=available_rads,
+                           current_radiopharmaceutical=current_rad)
+
 
 @login_required
 @patients_bp.route('/patients/delete/<row_key>', methods=['POST'])
@@ -181,12 +200,12 @@ def delete_patient(row_key):
         flash("Patient not found.", "error")
     return redirect(url_for('patients.manage_patients'))
 
+
 @login_required
 @patients_bp.route('/patients/clear', methods=['POST'])
 def clear_patients():
     user_id = current_user.username
     table_manager = get_table_manager()
-    # Query all patients for the current user.
     patients_to_clear = list(
         table_manager.query_entities(PATIENTS_TABLE, f"PartitionKey eq '{user_id}'")
     )

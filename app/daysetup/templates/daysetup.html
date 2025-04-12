@@ -3,7 +3,7 @@
 {% block title %}Plan PET Scanner Day Setup{% endblock %}
 
 {% block content %}
-    <h1>Plan PET Scanner Day Setup</h1>
+    <h1>Day Setup</h1>
 
     <form method="post" action="{{ url_for('daysetup.plan_daysetup') }}">
         <div class="inline-field">
@@ -12,29 +12,6 @@
             </label>
             <input type="number" step="any" name="generator_activity" id="generator_activity"
                    value="{{ generator_activity }}" required>
-        </div>
-
-        <fieldset>
-            <legend>Select Radiopharmaceuticals</legend>
-            {% if pharm_records %}
-                <div class="checkbox-group">
-                    {% for pharm in pharm_records %}
-                        <div class="checkbox-item">
-                            <input type="checkbox" name="pharmaceuticals" id="pharm_{{ pharm.RowKey }}"
-                                   value="{{ pharm.type }}"
-                                   {% if pharm.type in selected_pharms %}checked{% endif %}>
-                            <label for="pharm_{{ pharm.RowKey }}">{{ pharm.type }}</label>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <p>No available radiopharmaceuticals found.</p>
-            {% endif %}
-        </fieldset>
-
-        <div class="inline-field">
-            <label for="qa_activity">Activity Used for QA (GBq):</label>
-            <input type="number" step="any" name="qa_activity" id="qa_activity" value="{{ qa_activity }}" required>
         </div>
 
         <button type="submit">Save Day Setup</button>
