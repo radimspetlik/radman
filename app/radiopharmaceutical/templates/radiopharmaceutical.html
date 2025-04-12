@@ -5,7 +5,7 @@
 
 <a href="{{ url_for('radiopharm.add_radiopharm') }}" class="btn btn-edit">Add New Radiopharmaceutical</a>
 
-    <table border="1" cellspacing="0" cellpadding="8">
+<table id="radiopharmTable" border="1" cellspacing="0" cellpadding="8">
   <thead>
     <tr>
       <th>Pharmaceutical</th>
@@ -21,7 +21,7 @@
         <td>{{ record.price }}</td>
         <td>{{ record.time_slots | join(', ') }}</td>
         <td>
-        <div class="action-buttons">
+          <div class="action-buttons">
             <div style="display: flex; gap: 5px; align-items: stretch; width: 100%;">
               <div style="flex: 1;">
                 <a href="{{ url_for('radiopharm.edit_radiopharm', row_key=record.RowKey) }}" style="display: block; width: 100%;">
@@ -44,4 +44,117 @@
     {% endfor %}
   </tbody>
 </table>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const table = document.getElementById("radiopharmTable");
+  const headers = table.querySelectorAll("th");
+
+  // Append sort indicator span in each header.
+  headers.forEach(th => {
+    const span = document.createElement("span");
+    span.classList.add("sort-indicator");
+    span.style.marginLeft = "5px";
+    th.appendChild(span);
+  });
+
+  // Track which column is currently sorted and sort order (true = ascending).
+  let currentSortColumn = 0;
+  let currentSortAsc = true;
+
+  // Update header indicators with up (▲) or down (▼) arrows.
+  function updateSortIndicators(colIdx, asc) {
+    headers.forEach((th, index) => {
+      const indicator = th.querySelector(".sort-indicator");
+      if (index === colIdx) {
+        indicator.innerHTML = asc ? "&#9650;" : "&#9660;";
+      } else {
+        indicator.innerHTML = "";
+      }
+    });
+  }
+
+  // Custom comparator for the Pharmaceutical column (index 0).
+  // It sorts so that rows with a filled price (column index 1) come first,
+  // then sorts alphabetically by the Pharmaceutical name.
+  function pharmaceuticalComparator(asc) {
+    return function(a, b) {
+      let priceA = a.children[1].innerText.trim();
+      let priceB = b.children[1].innerText.trim();
+      let filledA = priceA !== "";
+      let filledB = priceB !== "";
+      if (filledA !== filledB) {
+        // For ascending order, rows with a filled price come first.
+        return filledA ? -1 : 1;
+      } else {
+        let textA = a.children[0].innerText.trim().toLowerCase();
+        let textB = b.children[0].innerText.trim().toLowerCase();
+        return asc ? textA.localeCompare(textB) : textB.localeCompare(textA);
+      }
+    }
+  }
+
+  // Generic comparer function for other columns.
+  const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
+  const comparer = (idx, asc) => (a, b) => {
+    let v1 = getCellValue(asc ? a : b, idx).trim();
+    let v2 = getCellValue(asc ? b : a, idx).trim();
+
+    // Use numeric sort for the Price column (index 1).
+    if (idx === 1) {
+      const num1 = parseFloat(v1);
+      const num2 = parseFloat(v2);
+      if (!isNaN(num1) && !isNaN(num2)) {
+        return num1 - num2;
+      }
+      // If one cell is empty, push it to the bottom.
+      if (v1 === "" && v2 !== "") return 1;
+      if (v1 !== "" && v2 === "") return -1;
+    }
+
+    // Default to a locale-based string comparison.
+    return v1.localeCompare(v2, undefined, { numeric: true });
+  };
+
+  // Default sort on page load using our custom pharmaceutical comparator
+  // so that items with a filled price come first and then sorted by name.
+  function defaultSort() {
+    const tbody = table.querySelector("tbody");
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+    rows.sort(pharmaceuticalComparator(true));
+    rows.forEach(row => tbody.appendChild(row));
+    updateSortIndicators(0, true);
+  }
+
+  // Attach click event listeners to each header for sorting.
+  headers.forEach((th, index) => {
+    th.addEventListener("click", function() {
+      // If the same column is clicked, toggle the sort order.
+      if (currentSortColumn === index) {
+        currentSortAsc = !currentSortAsc;
+      } else {
+        currentSortColumn = index;
+        currentSortAsc = true;
+      }
+
+      const tbody = table.querySelector("tbody");
+      const rows = Array.from(tbody.querySelectorAll("tr"));
+
+      // Use the custom comparator for the Pharmaceutical column.
+      if (index === 0) {
+        rows.sort(pharmaceuticalComparator(currentSortAsc));
+      } else {
+        rows.sort(comparer(index, currentSortAsc));
+      }
+
+      // Reattach the sorted rows.
+      rows.forEach(row => tbody.appendChild(row));
+      updateSortIndicators(currentSortColumn, currentSortAsc);
+    });
+  });
+
+  // Apply default sorting when the page loads.
+  defaultSort();
+});
+</script>
 {% endblock %}

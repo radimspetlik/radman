@@ -51,7 +51,6 @@
       <button type="submit" class="btn btn-primary">Add Dosing Scheme</button>
     </form>
 
-
   {% elif action == 'edit' and scheme %}
     <h2>Edit Dosing Scheme</h2>
     <form method="post" action="{{ url_for('dosing_schemes.edit_dosing_scheme', row_key=scheme.RowKey) }}" class="dosing-scheme-form">
@@ -98,11 +97,10 @@
       <button type="submit" class="btn btn-primary">Update Dosing Scheme</button>
     </form>
 
-
   {% else %}
     <h2>Your Dosing Schemes</h2>
     <a href="{{ url_for('dosing_schemes.add_dosing_scheme') }}" class="btn btn-edit">Add New Scheme</a>
-    <table>
+    <table id="dosingSchemeTable" border="1" cellspacing="0" cellpadding="8">
       <thead>
         <tr>
           <th>Radiopharm.</th>
@@ -151,5 +149,108 @@
         {% endfor %}
       </tbody>
     </table>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function() {
+        const table = document.getElementById("dosingSchemeTable");
+        const headers = table.querySelectorAll("th");
+
+        // Append a sort indicator to each sortable header (skip the Actions column)
+        headers.forEach((th, index) => {
+          if (index !== headers.length - 1) {
+            const span = document.createElement("span");
+            span.classList.add("sort-indicator");
+            span.style.marginLeft = "5px";
+            th.appendChild(span);
+          }
+        });
+
+        // Track the current column and sort order (true for ascending)
+        let currentSortColumn = 0;
+        let currentSortAsc = true;
+
+        // Update visual indicators for the currently sorted column
+        function updateSortIndicators(colIdx, asc) {
+          headers.forEach((th, index) => {
+            const indicator = th.querySelector(".sort-indicator");
+            if (indicator) {
+              if (index === colIdx) {
+                indicator.innerHTML = asc ? "&#9650;" : "&#9660;";
+              } else {
+                indicator.innerHTML = "";
+              }
+            }
+          });
+        }
+
+        const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
+
+        // Generic comparer function for numeric values (columns: Dose, UP1, IMG1, UP2, IMG2)
+        const comparer = (idx, asc) => (a, b) => {
+          let v1 = getCellValue(a, idx).trim();
+          let v2 = getCellValue(b, idx).trim();
+
+          // For the Dose column (index 2), remove the "MBq" part if present
+          if (idx === 2) {
+            v1 = v1.split(" ")[0];
+            v2 = v2.split(" ")[0];
+          }
+
+          const num1 = parseFloat(v1);
+          const num2 = parseFloat(v2);
+          if (!isNaN(num1) && !isNaN(num2)) {
+            return asc ? num1 - num2 : num2 - num1;
+          }
+          return asc
+            ? v1.localeCompare(v2, undefined, { numeric: true })
+            : v2.localeCompare(v1, undefined, { numeric: true });
+        };
+
+        // Default sort by Radiopharmaceutical (column 0) in ascending order.
+        function defaultSort() {
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.querySelectorAll("tr"));
+          rows.sort((a, b) => {
+            let v1 = getCellValue(a, 0).trim().toLowerCase();
+            let v2 = getCellValue(b, 0).trim().toLowerCase();
+            return v1.localeCompare(v2);
+          });
+          rows.forEach(row => tbody.appendChild(row));
+          updateSortIndicators(0, true);
+        }
+
+        // Add event listeners for all sortable headers except the last (Actions)
+        headers.forEach((th, index) => {
+          if (index === headers.length - 1) return; // Skip the Actions column
+          th.addEventListener("click", function() {
+            if (currentSortColumn === index) {
+              currentSortAsc = !currentSortAsc;
+            } else {
+              currentSortColumn = index;
+              currentSortAsc = true;
+            }
+            const tbody = table.querySelector("tbody");
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+
+            // For the Radiopharmaceutical column, sort as strings.
+            if (index === 0) {
+              rows.sort((a, b) => {
+                let v1 = getCellValue(a, 0).trim().toLowerCase();
+                let v2 = getCellValue(b, 0).trim().toLowerCase();
+                return currentSortAsc ? v1.localeCompare(v2) : v2.localeCompare(v1);
+              });
+            } else {
+              rows.sort(comparer(index, currentSortAsc));
+            }
+
+            rows.forEach(row => tbody.appendChild(row));
+            updateSortIndicators(currentSortColumn, currentSortAsc);
+          });
+        });
+
+        // Apply the default sort when the page loads.
+        defaultSort();
+      });
+    </script>
   {% endif %}
 {% endblock %}
