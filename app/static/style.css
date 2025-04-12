@@ -47,7 +47,7 @@ nav ul li a:hover {
 
 /* Headings */
 h2 {
-  margin-top: 0;
+  /*margin-top: 0;*/
 }
 
 /* Form styling */
@@ -181,4 +181,118 @@ button {
 }
 .record-delete:hover {
     background-color: #ff0000; /* Darker red on hover */
+}
+
+.time-slots {
+  min-width: 25%; /* Minimum width for time slots */
+}
+
+.dosing-scheme-form {
+  max-width: 600px;
+  margin: 20px auto;
+  padding: 20px;
+  background: #111111;
+  border: 1px solid #3f3f3f;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.dosing-scheme-form .form-group {
+  margin-bottom: 15px;
+}
+
+.dosing-scheme-form label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.dosing-scheme-form .form-control {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #212121;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.dosing-scheme-form .btn {
+  display: inline-block;
+  padding: 10px 15px;
+  background-color: #007bff;
+  border: none;
+  border-radius: 4px;
+  color: #101010;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.dosing-scheme-form .btn:hover {
+  background-color: #0056b3;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px; /* space between buttons */
+  align-items: center;
+}
+
+.btn {
+  display: inline-block;
+  padding: 8px 16px;
+  text-decoration: none;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  text-align: center;
+  transition: background-color 0.3s ease;
+}
+
+.btn:hover {
+  opacity: 0.9;
+}
+
+.btn-edit {
+  background-color: #007bff;
+}
+
+.btn-optimize {
+  background-color: #468800;
+}
+
+.btn-delete {
+  background-color: #dc3545;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap; /* Allows checkboxes to wrap if the container isn’t wide enough */
+  gap: 15px;       /* Adds spacing between the checkbox items */
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center; /* Vertically centers checkbox and label */
+}
+
+.inline-field {
+  display: flex;
+  align-items: center;  /* Vertically centers the elements */
+  gap: 10px;            /* Optional: adds horizontal spacing between label and input */
+  margin: 15px;  /* Optional: margin for spacing between different fields */
+}
+
+.inline-field label {
+  white-space: nowrap;  /* Prevents the label from breaking into multiple lines */
+}
+
+.uniform-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  line-height: 1.5;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  /* any other shared styles */
 }

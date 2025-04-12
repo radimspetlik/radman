@@ -1,12 +1,14 @@
 import logging
-import uuid
+import json
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 
+from app.constants import PHARM_TABLE
 from app.table_manager import get_table_manager
 
 radiopharm_bp = Blueprint('radiopharm', __name__, template_folder='templates')
 
+# Default set of pharmaceuticals that each user starts with if none exist
 DEFAULT_TYPES = [
     '18F-FDG',
     '18F-PSMA',
@@ -24,65 +26,68 @@ DEFAULT_TYPES = [
     '13N-NH3'
 ]
 
-
 @radiopharm_bp.route('/manage', methods=['GET', 'POST'])
 @login_required
 def manage():
     table_manager = get_table_manager()
+    partition_key = current_user.username
+
     if request.method == 'POST':
+        # Convert the raw form data into a list of (pharmaceutical) records
         form_data = request.form.to_dict(flat=False)
         records = []
         index = 0
-        # Gather all rows from the form
+
         while True:
-            key_prefix = f"records[{index}]"
-            type_key = f"{key_prefix}[type]"
+            base_name = f"records[{index}]"
+            type_key = f"{base_name}[type]"
             if type_key in form_data:
-                record = {}
-                record['type'] = form_data.get(type_key)[0]
-                record['available'] = (f"{key_prefix}[available]" in form_data)
-                record['price'] = form_data.get(f"{key_prefix}[price]", [""])[0]
-                record['time_slot'] = form_data.get(f"{key_prefix}[time_slot]", ["anytime"])[0]
-                record['row_key'] = form_data.get(f"{key_prefix}[row_key]", [""])[0]
-                records.append(record)
+                pharm_type = form_data[type_key][0]
+
+                # Convert "available" checkbox to boolean
+                available = (f"{base_name}[available]" in form_data)
+
+                # Price is straightforward
+                price = form_data.get(f"{base_name}[price]", [""])[0]
+
+                # Here we store multiple time slots as a list
+                # The name in the HTML is records[{i}][time_slots][]
+                time_slots = form_data.get(f"{base_name}[time_slots][]", [])
+
+                # Some DB columns
+                entity = {
+                    'PartitionKey': partition_key,
+                    'RowKey': pharm_type,  # Pharmaceutical name = unique RowKey
+                    'type': pharm_type,
+                    'available': str(available),
+                    'price': price,
+                    # Store time_slots as JSON in the DB
+                    'time_slots': json.dumps(time_slots)
+                }
+                records.append(entity)
                 index += 1
             else:
                 break
 
-        # Fetch existing records to figure out what's been removed
-        query_str = "PartitionKey eq '{}'".format(current_user.username)
-        existing_records = list(table_manager.query_entities("pharmaceutical", query=query_str))
-        existing_keys = set(r['RowKey'] for r in existing_records)
+        # Now, we want to upsert these and remove anything else from the DB
+        # that the user no longer has in their form. Because each pharma name
+        # must be unique per user, let's do the following:
+        existing = list(table_manager.query_entities(
+            PHARM_TABLE,
+            query="PartitionKey eq '{}'".format(partition_key)
+        ))
+        existing_keys = {item['RowKey'] for item in existing}
+        new_keys = {r['RowKey'] for r in records}
 
-        # Build a batch for upsert
-        batch = []
-        new_row_keys = set()
-        for i, rec in enumerate(records):
-            if rec['row_key']:
-                row_key = rec['row_key']
-            else:
-                # Generate a new row key if none exists
-                row_key = str(uuid.uuid4())
+        # Delete old pharmaceuticals not in the new form
+        to_delete = existing_keys - new_keys
 
-            entity = {
-                'PartitionKey': current_user.username,
-                'RowKey': row_key,
-                'type': rec['type'],
-                'available': str(rec['available']),
-                'price': rec['price'],
-                'time_slot': rec['time_slot']
-            }
-            new_row_keys.add(row_key)
-            batch.append(entity)
-
-        # Remove any records from the DB that are no longer present in the form
-        to_delete = existing_keys - new_row_keys
         try:
             for key in to_delete:
-                table_manager.delete_entities("pharmaceutical", [{'PartitionKey': current_user.username, 'RowKey': key}])
+                table_manager.delete_entities(PHARM_TABLE, [{'PartitionKey': partition_key, 'RowKey': key}])
 
-            # Upsert the current batch
-            table_manager.upload_batch_to_table("pharmaceutical", batch)
+            # Upsert the new set
+            table_manager.upload_batch_to_table(PHARM_TABLE, records)
             flash("Radiopharmaceutical data saved successfully.")
         except Exception as e:
             current_app.logger.error("Failed to save pharmaceutical data: %s", e)
@@ -91,21 +96,37 @@ def manage():
         return redirect(url_for('radiopharm.manage'))
 
     else:
-        # GET request: load existing records
-        query_str = "PartitionKey eq '{}'".format(current_user.username)
-        records = list(table_manager.query_entities("pharmaceutical", query=query_str))
-        if not records:
-            # If none exist, populate defaults
+        # GET request: load records
+        existing_records = list(table_manager.query_entities(
+            PHARM_TABLE,
+            query="PartitionKey eq '{}'".format(partition_key)
+        ))
+
+        if not existing_records:
+            # If there are no records at all, populate defaults
+            # with empty JSON array for time_slots
             records = []
-            for t in DEFAULT_TYPES:
+            for pharm_type in sorted(DEFAULT_TYPES):
                 records.append({
-                    'type': t,
+                    'PartitionKey': partition_key,
+                    'RowKey': pharm_type,
+                    'type': pharm_type,
                     'available': False,
                     'price': "",
-                    'time_slot': "anytime"
+                    'time_slots': json.dumps(["anytime"])  # store as "[]"
                 })
         else:
-            # Convert 'available' to bool
-            for rec in records:
+            # Convert 'available' to bool, parse the JSON time_slots
+            records = []
+            for rec in existing_records:
                 rec['available'] = (rec.get('available', 'False') == 'True')
+                if 'time_slots' in rec:
+                    try:
+                        rec['time_slots'] = json.loads(rec['time_slots'])
+                    except:
+                        rec['time_slots'] = []
+                else:
+                    rec['time_slots'] = []
+                records.append(rec)
+
         return render_template('manage.html', records=records)

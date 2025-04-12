@@ -9,7 +9,9 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 # Import your table manager and helper function get_table_manager from your module.
 # For example, assuming your table manager code is in a module named table_manager:
 
-from app.app_init import get_fernet, get_login_manager
+from app.app_init import get_login_manager
+from app.encrypt import get_fernet
+from app.constants import USERS_TABLE
 from app.table_manager import get_table_manager
 
 # Create the blueprint (set template_folder to your templates location)
@@ -67,8 +69,8 @@ def encrypt_email(email):
 # Function to load a user from NoSQL storage using TableManager.
 def load_user(username):
     table_manager = get_table_manager()
-    # Here, we assume all user records are stored in the "users" table under partition "USER"
-    entity = table_manager.get_entity("users", "USER", username)
+    # Here, we assume all user records are stored in the USERS_TABLE table under partition "USER"
+    entity = table_manager.get_entity(USERS_TABLE, "USER", username)
     if entity:
         # Build the User object using entity data.
         user = User(
@@ -119,7 +121,7 @@ def register():
         }
         table_manager = get_table_manager()
         # Upload the new user entity as a batch (list of one entity)
-        table_manager.upload_batch_to_table("users", [entity])
+        table_manager.upload_batch_to_table(USERS_TABLE, [entity])
         flash("User registered successfully. Please log in.")
         return redirect(url_for('user.login'))
     return render_template('register.html')
@@ -171,7 +173,7 @@ def profile():
         new_password = request.form.get('password')
         table_manager = get_table_manager()
         # Fetch the current user entity.
-        entity = table_manager.get_entity("users", "USER", current_user.username)
+        entity = table_manager.get_entity(USERS_TABLE, "USER", current_user.username)
         if not entity:
             flash("User not found.")
             return redirect(url_for('user.profile'))
@@ -180,7 +182,7 @@ def profile():
         if new_password:
             entity['password'] = hash_password(new_password)
         # Update the entity using an upsert batch.
-        table_manager.upload_batch_to_table("users", [entity])
+        table_manager.upload_batch_to_table(USERS_TABLE, [entity])
         flash("Profile updated successfully.")
         return redirect(url_for('user.profile'))
     return render_template('profile.html', user=current_user)
@@ -194,8 +196,8 @@ def manage_users():
     (In a production system, you might restrict this to administrators only.)
     """
     table_manager = get_table_manager()
-    # Retrieve all user entities from the "users" table.
-    users = list(table_manager.query_entities("users", query=None))
+    # Retrieve all user entities from the USERS_TABLE table.
+    users = list(table_manager.query_entities(USERS_TABLE, query=None))
     # Decrypt emails and convert active flag for display.
     for entity in users:
         try:
@@ -207,16 +209,16 @@ def manage_users():
         # Determine the action: either delete or toggle active status.
         action = request.form.get('action')
         target_username = request.form.get('username')
-        entity = table_manager.get_entity("users", "USER", target_username)
+        entity = table_manager.get_entity(USERS_TABLE, "USER", target_username)
         if entity:
             if action == 'delete':
-                table_manager.delete_entities("users", [entity])
+                table_manager.delete_entities(USERS_TABLE, [entity])
                 flash(f"User {target_username} deleted.")
             elif action == 'toggle':
                 # Toggle the user's active flag.
                 current_status = (entity.get('active', 'True') == 'True')
                 entity['active'] = 'False' if current_status else 'True'
-                table_manager.upload_batch_to_table("users", [entity])
+                table_manager.upload_batch_to_table(USERS_TABLE, [entity])
                 flash(f"User {target_username} status updated.")
         return redirect(url_for('user.manage_users'))
     return render_template('users.html', users=users)
@@ -259,10 +261,10 @@ def reset_password_token(token):
     if request.method == 'POST':
         new_password = request.form.get('password')
         table_manager = get_table_manager()
-        entity = table_manager.get_entity("users", "USER", username)
+        entity = table_manager.get_entity(USERS_TABLE, "USER", username)
         if entity:
             entity['password'] = hash_password(new_password)
-            table_manager.upload_batch_to_table("users", [entity])
+            table_manager.upload_batch_to_table(USERS_TABLE, [entity])
             flash("Password has been reset. Please log in.")
             return redirect(url_for('user.login'))
     return render_template('reset_password.html', token=token)

@@ -1,13 +1,14 @@
-import base64
 import os
 
-from cryptography.fernet import Fernet
-
+from app.constants import *
+from app.daysetup.daysetup import daysetup_bp
+from app.dosing_schemes.dosing_schemes import dosing_bp
+from app.optim.optim import optim_bp
+from app.patients.patients import patients_bp
 from app.radiopharmaceutical.radiopharmaceutical import radiopharm_bp
 from app.table_manager import get_table_manager
 
 SECRET = os.environ['SECRET_KEY']
-_FERNET = None
 _LOGIN_MANAGER = None
 _APP = None
 
@@ -25,18 +26,39 @@ def init_app(app):
 
     app.register_blueprint(user_bp)
     app.register_blueprint(radiopharm_bp, url_prefix="/radiopharm")
+    app.register_blueprint(dosing_bp, url_prefix="/dosing")
+    app.register_blueprint(daysetup_bp, url_prefix="/daysetup")
+    app.register_blueprint(patients_bp, url_prefix="/patients")
+    app.register_blueprint(optim_bp, url_prefix="/optim")
 
     table_manager = get_table_manager()
     try:
-        table_manager.create_table("users")
+        table_manager.create_table(USERS_TABLE)
         app.logger.info("Azure table 'users' created or already exists.")
     except Exception as e:
         app.logger.error("Failed to create azure table 'users': %s", e)
     try:
-        table_manager.create_table("pharmaceutical")
+        table_manager.create_table(PHARM_TABLE)
         app.logger.info("Azure table 'pharmaceutical' created or already exists.")
     except Exception as e:
         app.logger.error("Failed to create azure table 'pharmaceutical': %s", e)
+    try:
+        table_manager.create_table(DOSING_SCHEMES_TABLE)
+        app.logger.info("Azure table 'dosing_schemes' created or already exists.")
+    except Exception as e:
+        app.logger.error("Failed to create azure table 'dosing_schemes': %s", e)
+    try:
+        table_manager.create_table(DAYSETUP_TABLE)
+        app.logger.info("Azure table 'daysetup' created or already exists.")
+    except Exception as e:
+        app.logger.error("Failed to create azure table 'daysetup': %s", e)
+    try:
+        table_manager.create_table(PATIENTS_TABLE)
+        app.logger.info("Azure table 'patients' created or already exists.")
+    except Exception as e:
+        app.logger.error("Failed to create azure table 'patients': %s", e)
+
+
 
 def get_app(name):
     global _APP
@@ -51,13 +73,6 @@ def get_app(name):
 
     return _APP
 
-def get_fernet():
-    global _FERNET
-
-    if _FERNET is None:
-        key = base64.urlsafe_b64encode(SECRET[:32].encode())
-        _FERNET = Fernet(key)
-    return _FERNET
 
 def get_login_manager():
     global _LOGIN_MANAGER

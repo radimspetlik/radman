@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}PET Scanner Schedule Optimization{% endblock %}
+
+{% block content %}
+  <h1>PET Scanner Schedule</h1>
+
+  <p>The schedule runs from <strong>06:00</strong> to <strong>17:00</strong> and is divided into 10-minute blocks.</p>
+
+  <table border="1" cellspacing="0" cellpadding="2">
+    <thead>
+      <tr>
+        <th>Patient</th>
+        {% for slot in time_slots %}
+          <th>{{ slot }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for patient in patients %}
+        <tr>
+          <td>{{ patient.GivenName }} {{ patient.Surname }}</td>
+          {% for cell in patient.timeline %}
+            {% if cell %}
+              <td style="background-color: #4d3f00; text-align: center;">{{ cell }}</td>
+            {% else %}
+              <td>&nbsp;</td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="{{ time_slots|length + 1 }}">No patients found.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

@@ -18,11 +18,13 @@
         <td>{{ user.email }}</td>
         <td>{{ user.active }}</td>
         <td>
+        {%  if current_user.username == 'radim' %}
+            <div class="action-buttons">
           <!-- Form to toggle the active status -->
           <form method="POST" action="{{ url_for('user.manage_users') }}" style="display:inline;">
             <input type="hidden" name="username" value="{{ user.RowKey }}">
             <input type="hidden" name="action" value="toggle">
-            <button type="submit">
+            <button type="submit" class="btn btn-edit">
               {% if user.active %}Disable{% else %}Enable{% endif %}
             </button>
           </form>
@@ -30,10 +32,12 @@
           <form method="POST" action="{{ url_for('user.manage_users') }}" style="display:inline;">
             <input type="hidden" name="username" value="{{ user.RowKey }}">
             <input type="hidden" name="action" value="delete">
-            <button type="submit" onclick="return confirm('Are you sure you want to delete {{ user.RowKey }}?');">
+            <button type="submit" onclick="return confirm('Are you sure you want to delete {{ user.RowKey }}?');" class="btn btn-delete" >
               Delete
             </button>
           </form>
+            </div>
+        {% endif %}
         </td>
       </tr>
     {% endfor %}
