@@ -13,7 +13,19 @@
             <input type="number" step="any" name="generator_activity" id="generator_activity"
                    value="{{ generator_activity }}" required>
         </div>
+        <div class="inline-field">
+            <label for="generator_date">
+                Generator Date:
+            </label>
+            <input type="date" name="generator_date" id="generator_date"
+                   value="{{ generator_date }}" required>
+        </div>
 
         <button type="submit">Save Day Setup</button>
     </form>
+
+    <h2>Decay Curve</h2>
+    <p>The decay curve is computed using the radioactive decay equation:<br>
+       A(t) = A₀ · exp(−λt), with λ = ln(2)/half‑life (using a half‑life of approx. 270.8 days).</p>
+    <img src="data:image/svg+xml;base64,{{ decay_plot_url }}" alt="Decay Curve">
 {% endblock %}

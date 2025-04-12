@@ -30,6 +30,7 @@ pyyaml = "*"
 matplotlib = "*"
 urllib3 = "2.2.*"
 ortools = "*"
+pyomo = "*"
 
 [dev-packages]
 pylint = "==2.9.3"
