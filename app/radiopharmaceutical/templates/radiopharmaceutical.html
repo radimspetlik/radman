@@ -9,6 +9,7 @@
   <thead>
     <tr>
       <th>Pharmaceutical</th>
+      <th>Half Life (mins)</th>
       <th>Price per 1GBq</th>
       <th>Time Slots</th>
       <th>Actions</th>
@@ -18,6 +19,7 @@
     {% for record in records %}
       <tr>
         <td>{{ record.type }}</td>
+        <td>{{ record.half_life }}</td>
         <td>{{ record.price }}</td>
         <td>{{ record.time_slots | join(', ') }}</td>
         <td>
@@ -39,7 +41,7 @@
       </tr>
     {% else %}
       <tr>
-        <td colspan="4">No radiopharmaceuticals found.</td>
+        <td colspan="5">No radiopharmaceuticals found.</td>
       </tr>
     {% endfor %}
   </tbody>
@@ -75,12 +77,12 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   // Custom comparator for the Pharmaceutical column (index 0).
-  // It sorts so that rows with a filled price (column index 1) come first,
+  // It sorts so that rows with a filled price (column index 2) come first,
   // then sorts alphabetically by the Pharmaceutical name.
   function pharmaceuticalComparator(asc) {
     return function(a, b) {
-      let priceA = a.children[1].innerText.trim();
-      let priceB = b.children[1].innerText.trim();
+      let priceA = a.children[2].innerText.trim();
+      let priceB = b.children[2].innerText.trim();
       let filledA = priceA !== "";
       let filledB = priceB !== "";
       if (filledA !== filledB) {
@@ -100,8 +102,8 @@ document.addEventListener("DOMContentLoaded", function() {
     let v1 = getCellValue(asc ? a : b, idx).trim();
     let v2 = getCellValue(asc ? b : a, idx).trim();
 
-    // Use numeric sort for the Price column (index 1).
-    if (idx === 1) {
+    // Use numeric sort for the Half Life (index 1) and Price (index 2) columns.
+    if (idx === 1 || idx === 2) {
       const num1 = parseFloat(v1);
       const num2 = parseFloat(v2);
       if (!isNaN(num1) && !isNaN(num2)) {

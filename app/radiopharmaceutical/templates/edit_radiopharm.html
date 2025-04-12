@@ -7,6 +7,11 @@
     <label for="name">Pharmaceutical Name:</label>
     <input type="text" name="name" id="name" value="{{ record.type }}" required>
   </div>
+  <!-- New Half life input inserted as second row -->
+  <div>
+    <label for="half_life">Half life (mins):</label>
+    <input type="number" step="any" name="half_life" id="half_life" value="{{ record.half_life }}" required>
+  </div>
   <div>
     <label>Price per 1GBq:</label>
     <span id="price_display">{{ record.price }}</span>

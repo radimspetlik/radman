@@ -27,7 +27,6 @@ DEFAULT_TYPES = [
     '13N-NH3'
 ]
 
-
 @radiopharm_bp.route('/manage', methods=['GET'])
 @login_required
 def manage():
@@ -51,6 +50,7 @@ def manage():
                 'PartitionKey': partition_key,
                 'RowKey': row_key,
                 'type': pharm_type,
+                'half_life': "",  # New half life parameter (in mins)
                 'price': "",
                 'time_slots': json.dumps(["anytime"])  # Default time slot stored as JSON.
             })
@@ -89,6 +89,8 @@ def add_radiopharm():
     if request.method == 'POST':
         # Get the submitted form data.
         name = request.form.get('name')
+        # Get the half life in minutes.
+        half_life = request.form.get('half_life', "")
         price = request.form.get('price', "")
         # For multi-select, getlist returns a list of time slots.
         time_slots = request.form.getlist('time_slots')
@@ -99,6 +101,7 @@ def add_radiopharm():
             'PartitionKey': partition_key,
             'RowKey': row_key,
             'type': name,  # Store the pharmaceutical name.
+            'half_life': half_life,  # Store the half life (mins)
             'price': price,
             'time_slots': json.dumps(time_slots)
         }
@@ -128,11 +131,13 @@ def edit_radiopharm(row_key):
 
     if request.method == 'POST':
         name = request.form.get('name')
+        half_life = request.form.get('half_life', "")
         price = request.form.get('price', "")
         time_slots = request.form.getlist('time_slots')
 
         # Update fields while keeping RowKey unchanged.
         record['type'] = name
+        record['half_life'] = half_life  # Update half life
         record['price'] = price
         record['time_slots'] = json.dumps(time_slots)
         try:

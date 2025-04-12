@@ -1,140 +1,219 @@
 #!/usr/bin/env python3
+
 import numpy as np
 import pyomo.environ as pyo
-from pyomo.environ import ConcreteModel, Set, Param, Var, Binary, NonNegativeReals, Integers, Objective, Constraint, RangeSet, Reals
+from pyomo.environ import (
+    ConcreteModel, Set, Param, Var, Binary, NonNegativeReals,
+    NonNegativeIntegers, Integers, Objective, Constraint, RangeSet, Reals
+)
 from pyomo.opt import SolverFactory
 import math
 
+###############################################################################
+# Helper Functions
+###############################################################################
+
+def compute_ga68_activity(
+    initial_activity_GBq,
+    days_since_calibration,
+    production_time_minutes=5,
+    half_life_Ge68_days=270.8,
+    half_life_Ga68_minutes=67.71
+):
+    """
+    Compute the equilibrium Ga-68 activity (in MBq) extracted from a Ge-68/Ga-68
+    generator after a specified production time, given:
+      - initial_activity_GBq: the generator's initial Ge-68 activity in GBq,
+      - days_since_calibration: elapsed days since the generator's reference calibration,
+      - production_time_minutes: time in minutes for a single generation run,
+      - half_life_Ge68_days: Ge-68 half-life in days (default ~270.8),
+      - half_life_Ga68_minutes: Ga-68 half-life in minutes (default ~67.71).
+    """
+    # Decay constants (lambda)
+    lambda_Ge68 = np.log(2) / half_life_Ge68_days
+    lambda_Ga68 = np.log(2) / half_life_Ga68_minutes
+
+    # Current Ge-68 activity in MBq (initially in GBq → multiply by 1000 to get MBq)
+    current_Ge68_activity_MBq = initial_activity_GBq * 1000.0 * np.exp(-lambda_Ge68 * days_since_calibration)
+
+    # Ga-68 activity produced after 'production_time_minutes'
+    # Assuming equilibrium is reached and entire daughter activity is extracted
+    ga68_activity_MBq = current_Ge68_activity_MBq * (1 - np.exp(-lambda_Ga68 * production_time_minutes))
+
+    return ga68_activity_MBq
+
+def single_run_ga68_activity(
+    equilibrium_MBq,
+    run_steps,
+    step_minutes=5,
+    half_life_Ga68_minutes=67.71
+):
+    """
+    Returns the Ga-68 (MBq) extracted in a single generator run of 'run_steps'
+    time-steps (each step being 'step_minutes' long).
+    Uses the usual formula:  eq * (1 - exp(-lambda * t)).
+    """
+    lambda_Ga68 = np.log(2) / half_life_Ga68_minutes
+    total_minutes = run_steps * step_minutes
+
+    # If you wait long enough, the generator can produce 'equilibrium_MBq' in one shot.
+    # The extracted portion is given by (1 - exp(-lambda * total_minutes)).
+    extracted = equilibrium_MBq * (1 - np.exp(-lambda_Ga68 * total_minutes))
+    return extracted
+
+def Gtime_piecewise_rule(block, t):
+    """
+    Defines a piecewise relationship for the Ga-68 yield at time t:
+      yield_ga68[t] = function(Gtime[t])
+    Gtime[t] is the integer generation runtime in discrete steps,
+    yield_ga68[t] is the total MBq extracted from the generator for that run.
+    """
+    m = block.model()
+    return pyo.Piecewise(
+        m.x['Ga68', t],   # "output" variable of the piecewise
+        m.Gtime[t],       # "input" variable
+        pw_pts=m.PW_values,
+        f_rule=m.PW_breakpoints,
+        pw_constr_type='EQ',  # Must match the piecewise function exactly
+        pw_repn='SOS2'
+    )
+
+
+###############################################################################
+# Main Script
+###############################################################################
+
 if __name__ == '__main__':
+    ###########################################################################
+    # 1. Define Data and Parameters
+    ###########################################################################
 
-    ###############################################################################
-    # Example data
-    ###############################################################################
-
-    # Discrete time steps: each step = 5 minutes
-    # We'll define a horizon of 96 steps => 480 minutes total = 8h
+    # -----------------------
+    # Time Horizon
+    # -----------------------
+    # Discrete time steps: each step = 5 minutes.
+    # Set NUM_STEPS = 50 => total 50 * 5 = 250 minutes = 4h10m (for example).
     NUM_STEPS = 50
     time_set = range(NUM_STEPS)
 
-    # Warm-up & cool-down times (in discrete steps) for the 68Ga generator
-    GEN_WARMUP  = 1
-    GEN_COOLDOWN= 1
+    # -----------------------
+    # Ga-68 Generator Parameters
+    # -----------------------
+    GEN_WARMUP   = 1  # Steps required for warm-up
+    GEN_COOLDOWN = 1  # Steps required for cool-down
 
-    # Constants
-    half_life_Ge68_days = 270.8
+    # Half-lives:
+    half_life_Ge68_days    = 270.8
     half_life_Ga68_minutes = 67.71
 
-    def compute_ga68_activity(initial_activity_GBq, days_since_calibration, production_time_minutes=5):
-        # Decay constants
-        lambda_Ge68 = np.log(2) / half_life_Ge68_days
-        lambda_Ga68 = np.log(2) / half_life_Ga68_minutes
+    # For demonstration, suppose the generator was 1.85 GBq at calibration,
+    # and 30 days have elapsed since that calibration.
+    initial_activity_GBq = 1.85
+    elapsed_days_since_calibration = 30
 
-        # Current Ge68 activity in MBq
-        current_Ge68_activity_MBq = initial_activity_GBq * 1000 * np.exp(-lambda_Ge68 * days_since_calibration)
+    # Compute max possible Ga-68 equilibrium activity (MBq) from the generator in 5 minutes.
+    max_Q = compute_ga68_activity(
+        initial_activity_GBq,
+        elapsed_days_since_calibration,
+        production_time_minutes=5,
+        half_life_Ge68_days=half_life_Ge68_days,
+        half_life_Ga68_minutes=half_life_Ga68_minutes
+    )
 
-        # Ga68 activity produced after a given time (assuming equilibrium and full extraction)
-        ga68_activity_MBq = current_Ge68_activity_MBq * (1 - np.exp(-lambda_Ga68 * production_time_minutes))
-
-        return ga68_activity_MBq
-
-    # Example usage
-    initial_activity_GBq = 1.85  # Example: 1.85 GBq generator
-    elapsed_days_since_calibration = 30  # Example: 30 days since calibration
-    produced_activity = compute_ga68_activity(initial_activity_GBq, elapsed_days_since_calibration)
-
-    # For a more accurate or custom function, you can define more (x,g(x)) breakpoints.
-    def cumulative_ga68_activity(Q, steps, step_minutes=5):
-        lambda_Ga68 = np.log(2) / half_life_Ga68_minutes
-        cumulative_activity = 0
-        for i in range(steps):
-            cumulative_activity *= np.exp(-lambda_Ga68 * step_minutes)
-            cumulative_activity += Q
-        return cumulative_activity
-
-
+    # Generate piecewise breakpoints for possible run lengths of the generator.
+    # For example, if we let generator run from 0..(NUM_STEPS//2) steps, i.e. up to 25 steps in this example.
     Ge68_num_steps = NUM_STEPS // 2
-    max_Q = compute_ga68_activity(initial_activity_GBq, elapsed_days_since_calibration, 5)
-
-    PW_values = [n for n in range(Ge68_num_steps + 1)]
+    PW_values = list(range(Ge68_num_steps + 1))  # discrete steps: 0..25
     PW_breakpoints = [
-        cumulative_ga68_activity(max_Q, n, step_minutes=5)
+        single_run_ga68_activity(
+            equilibrium_MBq=max_Q,
+            run_steps=n,
+            step_minutes=5,
+            half_life_Ga68_minutes=half_life_Ga68_minutes
+        )
         for n in PW_values
     ]
 
-    # Radiopharmaceuticals and their half-lives (in minutes),
-    # plus cost (currency per GBq),
-    # plus availability windows (the set of time steps where you can buy or produce them).
-    # We illustrate with 5 common isotopes: Ga68, F18, C11, O15, N13
-    # and define some arbitrary cost and availability sets. Adjust as needed.
+    # -----------------------
+    # Radiopharmaceutical Definitions
+    # -----------------------
+    # We'll define 5 isotopes for illustration:
     pharma_set = ['Ga68','F18','C11','O15','N13']
-
     half_life = {
-        'Ga68': 68.0,
+        'Ga68': 68.0,    # minutes
         'F18': 109.8,
         'C11': 20.4,
         'O15': 2.0,
         'N13': 10.0
     }
-
     cost_per_GBq = {
-        'Ga68': 250.0,  # example cost for Ga-68
+        'Ga68': 250.0,   # (currency/GBq)
         'F18' : 100.0,
         'C11' : 300.0,
         'O15' : 500.0,
         'N13' : 400.0
     }
-
-    # For demonstration, assume each is "available" in some subset of times
-    # (If a time is not in the set, x_{f,t} must be 0.)
+    # Availability windows for each isotope.
+    # If a time is not in the list, we cannot buy/produce that isotope at that time.
     pharma_avail = {
-        'Ga68': list(time_set),          # we "produce" Ga-68 (with generator constraints)
-        'F18' : [0,3,6,9,12,15, 18, 20, 23, 25, 28],         # can only be delivered at these times
-        'C11' : [2,4,8,10,14],           # ...
+        'Ga68': list(time_set),     # We'll produce Ga-68 via the generator
+        'F18' : [0,3,6,9,12,15,18,20,23,25,28],
+        'C11' : [2,4,8,10,14],
         'O15' : [1,5,7,11,13,17],
         'N13' : [0,5,10,15]
     }
 
-    # Patients
-    # For each patient p, define:
-    #  - required pharma: phi[p]
-    #  - required dose (MBq): dose[p]
-    #  - durations: u1[p], i1[p], u2[p], i2[p] in discrete time steps
+    # -----------------------
+    # Patient Definitions
+    # -----------------------
     patient_set = [1,2,3]
-
-    phi = {
+    # For each patient, define which pharma is required and how much dose (MBq).
+    phi = {   # which isotope each patient needs
         1: 'Ga68',
         2: 'F18',
         3: 'F18'
     }
-
     dose_MBq = {
         1: 150.0,
         2: 280.0,
         3: 50.0
     }
 
-    # durations (in steps). 1 step = 5 min
-    # e.g. patient 1 has 1 step uptake1, 2 steps imaging1, 1 step uptake2, 2 steps imaging2
-    u1 = {1:0, 2:0, 3:12}
-    i1 = {1:4, 2:12, 3:5}
-    u2 = {1:18, 2:0, 3:0}
-    i2 = {1:4, 2:0, 3:0}
+    # For each patient p, define durations of uptake (u1,p), imaging1 (i1,p), uptake2 (u2,p), imaging2 (i2,p),
+    # expressed in discrete time steps (each step = 5 minutes).
+    # For example, patient 1 has: 0 steps for the first uptake, 4 steps for imaging1,
+    # 18 steps for second uptake, 4 steps for imaging2.
+    u1 = {1: 0,  2:  0,  3: 12}
+    i1 = {1: 4,  2: 12, 3:  5}
+    u2 = {1: 18, 2:  0,  3:  0}
+    i2 = {1: 4,  2:  0,  3:  0}
 
-    ###############################################################################
-    # Create a Pyomo model
-    ###############################################################################
+    ###########################################################################
+    # 2. Build the Pyomo Model
+    ###########################################################################
+
     model = ConcreteModel("PET_Schedule_with_Ga68Generator")
 
+    # -----------------------
     # Sets
-    model.T = RangeSet(0, NUM_STEPS-1)
-    model.P = Set(initialize=patient_set)
-    model.F = Set(initialize=pharma_set)
+    # -----------------------
+    model.T = RangeSet(0, NUM_STEPS - 1)  # Time steps
+    model.P = Set(initialize=patient_set) # Patients
+    model.F = Set(initialize=pharma_set)  # Pharmas (isotopes)
 
+    # We store PW_values and PW_breakpoints in the model so that the piecewise
+    # block can reference them easily.
+    model.PW_values = PW_values
+    model.PW_breakpoints = PW_breakpoints
+
+    # -----------------------
     # Parameters
+    # -----------------------
     model.half_life = Param(model.F, initialize=half_life, mutable=True)
     model.cost      = Param(model.F, initialize=cost_per_GBq, mutable=True)
 
-    # Availabilities: we'll encode it by forcing x_{f,t} = 0 if t not in pharma_avail[f]
+    # We encode the availability sets so that if a time step 't' is not in
+    # pharma_avail[f], we must set x[f,t] = 0.
     def can_buy_filter(model, t, f):
         return (t in pharma_avail[f])
 
@@ -145,119 +224,228 @@ if __name__ == '__main__':
         filter=can_buy_filter
     )
 
-    # Patient dose and durations as Param/Dict
-    model.phi     = phi    # dictionary: patient -> required pharma
-    model.dose_MBq= dose_MBq
-    model.u1 = u1
-    model.i1 = i1
-    model.u2 = u2
-    model.i2 = i2
+    # Patient dose and durations (from dictionary references).
+    # In many Pyomo models, you could keep these in external dictionaries
+    # or define them as Param. We'll just store them directly.
+    model.phi      = phi
+    model.dose_MBq = dose_MBq
+    model.u1       = u1
+    model.i1       = i1
+    model.u2       = u2
+    model.i2       = i2
 
-    # Decision Variables
+    ###########################################################################
+    # 3. Define Decision Variables
+    ###########################################################################
 
-    # (1) Patient start time: S_{p,t} binary => 1 if patient p starts exactly at time t
+    # (A) Patient Start: S[p,t] = 1 if patient p starts exactly at time t
     model.S = Var(model.P, model.T, domain=Binary, initialize=0.0)
 
-    # (2) Amount purchased/produced x_{f,t} in MBq
-    #     We'll force x_{f,t}=0 if t not in availability set of f (below).
+    # (B) Amount purchased/produced x[f,t] in MBq
+    # We will force x[f,t] = 0 if (f,t) is not in the availability set or
+    # if we don't run the generator for Ga68.
     model.x = Var(model.F, model.T, domain=NonNegativeReals, initialize=0.0)
 
-    # (3) We will define a "start of Ga68 generator" variable Gstart[t] = 1 if we
-    #     initiate a generation block at time t. Then the generator is busy
-    #     from t to t + warm-up + generation_time + cool-down - 1.
+    # (C) Ga68 Generator Start: Gstart[t] = 1 if a generator run is initiated at time t
     model.Gstart = Var(model.T, domain=Binary, initialize=0.0)
 
-    # (4) An integer variable for the generation time length Gtime[t], in *discrete steps*,
-    #     triggered if we produce Ga-68 at time t. We'll approximate it with piecewise.
-    model.Gtime = Var(model.T, domain=Integers, bounds=(0, Ge68_num_steps), initialize=0.0)  # some upper bound
+    # (D) Ga68 Generator run-time (integer steps): Gtime[t]
+    #     The length (in discrete steps) of the run started at time t (if Gstart[t] = 1).
+    #     We'll approximate the yield with a piecewise function.
+    model.Gtime = Var(
+        model.T,
+        domain=Integers,
+        bounds=(0, Ge68_num_steps),
+        initialize=0
+    )
 
-    # NEW: Inventory variable for each pharma at each time step
+    # (E) Gdur[t] can be used similarly, but you might unify Gtime and Gdur.
+    #     We'll keep it as in the original code, though it may be partially redundant.
+    model.Gdur = Var(
+        model.T,
+        domain=NonNegativeIntegers,
+        bounds=(0, Ge68_num_steps)
+    )
+
+    # (F) Inventory for each pharma (f,t)
+    #     How many MBq of isotope f are in stock at time t?
     model.I = Var(model.F, model.T, domain=NonNegativeReals, initialize=0.0)
 
+    # (G) The actual yield of Ga68 from run started at t.
+    model.yield_ga68 = Var(model.T, domain=NonNegativeReals)
 
-    # Constraint to ensure patient schedule fits within the NUM_STEPS horizon
+    # (H) Additional variables used to track the exact time a Ga68 run ends,
+    #     allowing us to place Ga68 into inventory at the correct time step.
+    model.Ga68_arrival = Var(model.T, domain=NonNegativeReals)
+    model.RunEnds = Var(model.T, model.T, domain=Binary)
+    # yield_if_run_ends[t1, t2] is a help variable to handle arrival logic
+    model.yield_if_run_ends = Var(model.T, model.T, domain=NonNegativeReals)
+
+    ###########################################################################
+    # 4. Define Constraints
+    ###########################################################################
+
+    # -----------------------
+    # 4.1 Patient Time Horizon Constraint
+    # -----------------------
+    # Ensures a patient cannot start if there's insufficient time left to complete
+    # their entire protocol (u1 + i1 + u2 + i2) within the horizon.
     def patient_time_horizon_rule(m, p, t):
         finish_time = t + m.u1[p] + m.i1[p] + m.u2[p] + m.i2[p]
         if finish_time <= NUM_STEPS:
             return pyo.Constraint.Skip
         else:
+            # Force S[p,t] = 0 if starting at t would exceed the horizon.
             return m.S[p, t] == 0
     model.PatientTimeHorizon = Constraint(model.P, model.T, rule=patient_time_horizon_rule)
 
+    # -----------------------
+    # 4.2 Ga68 Generator Constraints
+    # -----------------------
 
-    # We also need to link x['Ga68', t] with Gstart[t] and Gtime[t].
-    # We'll do that with piecewise constraints and with a "no overlap" generator constraint.
+    # (A) Gdur[t] is only > 0 if we start the generator at t
+    def dur_when_start_rule(m, t):
+        return m.Gdur[t] <= Ge68_num_steps * m.Gstart[t]
+    model.Ga68DurStartLink = Constraint(model.T, rule=dur_when_start_rule)
 
-    ###############################################################################
-    # Piecewise definition for Gtime[t] = g( x['Ga68',t] ), using breakpoints
-    ###############################################################################
-    # We can use a Pyomo Piecewise to define Gtime[t] = PW_values(...) wrt x_{Ga68,t}.
-    # The piecewise function is stepwise or linear. Let's do stepwise (SOC = 'EQ').
-    #   x in [0, 100] => Gtime = 1, etc.
-    # If you prefer linear interpolation, you could use other options.
+    BIG_M = NUM_STEPS
 
-    def Gtime_piecewise_rule(b, t):
-        m = b.model()
-        return pyo.Piecewise(
-            m.Gtime[t],  # output variable
-            m.x['Ga68', t],  # single domain variable at index t
-            pw_pts=PW_breakpoints,  # breakpoints for x
-            pw_constr_type='EQ',  # enforce exact piecewise matching
-            f_rule=PW_values,  # corresponding outputs
-            pw_repn='SOS2'  # piecewise representation
-        )
+    # (B) No overlap: if a run starts at t1, it occupies
+    #     [t1, t1 + GEN_WARMUP + Gtime[t1] + GEN_COOLDOWN - 1].
+    #     Another run cannot start until after that block finishes.
+    def no_generator_overlap_rule(m, t1, t2):
+        if t1 >= t2:
+            return Constraint.Skip
+        return t2 >= t1 + GEN_WARMUP + m.Gtime[t1] + GEN_COOLDOWN \
+               - BIG_M * (2 - m.Gstart[t1] - m.Gstart[t2])
+    model.NoGeneratorOverlap = Constraint(model.T, model.T, rule=no_generator_overlap_rule)
 
+    # (C) We define a piecewise function for x['Ga68', t] in a separate block.
+    #     x['Ga68', t] = some function of Gtime[t].
     model.Gtime_piecewise = pyo.Block(model.T, rule=Gtime_piecewise_rule)
 
-    # Alternatively, if you prefer direct big-M logic, you could code explicit
-    # constraints. Piecewise is a cleaner approach in Pyomo.
+    # (D) Constrain yield_ga68[t] to match x['Ga68', t]. For clarity, they can be
+    #     the same variable, but we keep them separate in this example.
+    #     yield_ga68[t] = x['Ga68', t], or we can rely on the piecewise.
+    #     We'll skip an explicit equality here since the piecewise has it.
 
-    ###############################################################################
-    # (A) Each patient starts exactly once
-    ###############################################################################
+    # (E) Track the actual arrival time of Ga68 product in the inventory.
+    # We use binary RunEnds[t1, t2] to indicate that the generator run
+    # started at t1 finishes exactly at t2. Then we can place yield in
+    # the inventory at t2 (or at t2+1, depending on discrete vs. continuous interpretation).
+    # For demonstration, we add constraints to link these times.
+
+    # Make a small block for the time link constraints:
+    def run_ends_time_link_lower(m, t1, t2):
+        # lower bound
+        if t2 <= t1:
+            return pyo.Constraint.Skip
+        M = 99999
+        lhs = t2 - t1 - GEN_WARMUP - m.Gdur[t1]
+        return lhs >= -M * (1 - m.RunEnds[t1, t2])
+
+    def run_ends_time_link_upper(m, t1, t2):
+        # upper bound
+        if t2 <= t1:
+            return pyo.Constraint.Skip
+        M = 99999
+        lhs = t2 - t1 - GEN_WARMUP - m.Gdur[t1]
+        return lhs <= M * (1 - m.RunEnds[t1, t2])
+
+    model.RunEndsTimeLinkLower = Constraint(model.T, model.T, rule=run_ends_time_link_lower)
+    model.RunEndsTimeLinkUpper = Constraint(model.T, model.T, rule=run_ends_time_link_upper)
+
+    # (F) The yield at (t1) can only be placed if the run truly ends at (t2)
+    BIG_M_yield = max(PW_breakpoints)
+    def yield_if_run_ends_rule(m, t1, t2):
+        return m.yield_if_run_ends[t1, t2] <= m.yield_ga68[t1]
+    model.YieldIfRunEnds_Upp = Constraint(model.T, model.T, rule=yield_if_run_ends_rule)
+
+    def yield_if_run_ends_binary_rule(m, t1, t2):
+        return m.yield_if_run_ends[t1, t2] <= BIG_M_yield * m.RunEnds[t1, t2]
+    model.YieldIfRunEnds_Bin = Constraint(model.T, model.T, rule=yield_if_run_ends_binary_rule)
+
+    def yield_if_run_ends_lower_rule(m, t1, t2):
+        return m.yield_if_run_ends[t1, t2] >= m.yield_ga68[t1] - BIG_M_yield * (1 - m.RunEnds[t1, t2])
+    model.YieldIfRunEnds_Low = Constraint(model.T, model.T, rule=yield_if_run_ends_lower_rule)
+
+    # (G) Ga68 Inventory equation:
+    # I['Ga68', t] = decayed I['Ga68', t-1] + any newly arrived yield at t - consumption at t.
+    def ga68_inventory_rule(m, t):
+        # decay factor per step
+        decay_factor = 2 ** (-(5.0 / half_life_Ga68_minutes))
+        # total demand at time t for Ga68
+        demand_t = sum(m.dose_MBq[p] * m.S[p, t] for p in m.P if m.phi[p] == 'Ga68')
+
+        if t == 0:
+            # At t=0, no previous inventory
+            return m.I['Ga68', 0] == m.Ga68_arrival[0] - demand_t
+        else:
+            return (m.I['Ga68', t] ==
+                m.I['Ga68', t - 1] * decay_factor +
+                m.Ga68_arrival[t] -
+                demand_t
+            )
+    model.Ga68Inventory = Constraint(model.T, rule=ga68_inventory_rule)
+
+
+    # Constraint: Ensure sufficient inventory at patient scheduling time
+    def ga68_inventory_sufficiency_rule(m, t):
+        demand_t = sum(m.dose_MBq[p] * m.S[p, t] for p in m.P if m.phi[p] == 'Ga68')
+        return m.I['Ga68', t] >= demand_t
+    model.Ga68InventorySufficiency = Constraint(model.T, rule=ga68_inventory_sufficiency_rule)
+
+
+    # We still need to define how Ga68_arrival[t] is computed from yield_if_run_ends[t1, t2].
+    # You could sum all yield that ends exactly at t.
+    # That is: Ga68_arrival[t] = sum_{t1} yield_if_run_ends[t1, t],
+    # ensuring t2 == t.
+    def ga68_arrival_def_rule(m, t):
+        return m.Ga68_arrival[t] == sum(m.yield_if_run_ends[t1, t] for t1 in m.T)
+    model.Ga68ArrivalDef = Constraint(model.T, rule=ga68_arrival_def_rule)
+
+    # -----------------------
+    # 4.3 Patient Scheduling Constraints
+    # -----------------------
+
+    # (A) Each patient must start exactly once
     def rule_one_start_per_patient(m, p):
-        return sum(m.S[p,t] for t in m.T) == 1
+        return sum(m.S[p, t] for t in m.T) == 1
     model.EachPatientOnce = Constraint(model.P, rule=rule_one_start_per_patient)
 
-    ###############################################################################
     # (B) No scanner overlap in imaging intervals
-    ###############################################################################
-    # If patient p starts at time t, its imaging intervals are:
-    #   [t + u1[p],   t + u1[p] + i1[p])   for imaging1
-    #   [t + u1[p] + i1[p] + u2[p], t + u1[p] + i1[p] + u2[p] + i2[p]) for imaging2
-    #
-    # We'll do a time-indexed approach: For any pair of start times (t1, t2) that
-    # would cause overlap, we add constraint: S[p,t1] + S[q,t2] <= 1
-    # We skip if there's no possibility of overlap in the discrete timeline.
-
     def rule_no_scanner_overlap(m, p1, p2, t1, t2):
+        """
+        If there is any time overlap in the imaging intervals for two distinct
+        patients p1, p2, they cannot both start in those times (S[p1,t1] + S[p2,t2] ≤ 1).
+        """
         if p1 >= p2:
-            return pyo.Constraint.Skip  # avoid duplicates and p1=p2
-        # Calculate the imaging intervals for p1
+            return pyo.Constraint.Skip  # Avoid duplicate or same-patient checks
+
+        # Calculate imaging intervals for patient p1 starting at t1
         p1_im1_start = t1 + m.u1[p1]
         p1_im1_end   = t1 + m.u1[p1] + m.i1[p1]
         p1_im2_start = t1 + m.u1[p1] + m.i1[p1] + m.u2[p1]
         p1_im2_end   = t1 + m.u1[p1] + m.i1[p1] + m.u2[p1] + m.i2[p1]
 
-        # for p2
+        # Entire imaging span for p1: from start of first imaging to end of second imaging
+        p1_start_im = p1_im1_start
+        p1_end_im   = p1_im2_end
+
+        # Same for patient p2
         p2_im1_start = t2 + m.u1[p2]
         p2_im1_end   = t2 + m.u1[p2] + m.i1[p2]
         p2_im2_start = t2 + m.u1[p2] + m.i1[p2] + m.u2[p2]
         p2_im2_end   = t2 + m.u1[p2] + m.i1[p2] + m.u2[p2] + m.i2[p2]
 
-        # Combined interval for p1 imaging: [p1_start, p1_end)
-        # We'll define min, max just to unify
-        p1_start_im = p1_im1_start
-        p1_end_im   = p1_im2_end
-
         p2_start_im = p2_im1_start
         p2_end_im   = p2_im2_end
 
-        # Check if there's a potential overlap in discrete steps
-        # Overlap occurs if intervals intersect in time
+        # Overlap check: intervals [p1_start_im, p1_end_im)
+        #                vs [p2_start_im, p2_end_im)
+        # If they do overlap, we forbid them from both starting in that configuration.
         if (p1_start_im < p2_end_im) and (p2_start_im < p1_end_im):
-            # Then we must forbid them from both happening
-            return m.S[p1,t1] + m.S[p2,t2] <= 1
+            return m.S[p1, t1] + m.S[p2, t2] <= 1
         else:
             return pyo.Constraint.Skip
 
@@ -266,75 +454,88 @@ if __name__ == '__main__':
         rule=rule_no_scanner_overlap
     )
 
-
-    # (C) Inventory Balance (replaces the old “DoseConstraint”)
-    #     I[f,t] = Decayed inventory from (t-1) + new x[f,t] − sum of demands at t
-
+    # -----------------------
+    # 4.4 Inventory Constraints (for non-Ga68)
+    # -----------------------
+    # For each pharma f != Ga68, we do a standard discrete-time inventory balance:
+    #   I[f,t] = decayed I[f,t-1] + x[f,t] - sum(demand at t)
     def inventory_balance_rule(m, f, t):
-        decay_factor = 2 ** (- (5.0 / m.half_life[f]))
+        if f == 'Ga68':
+            # We already handle Ga68 separately
+            return pyo.Constraint.Skip
+
+        # Decay factor for pharma f per time step (5 minutes)
+        decay_factor = 2 ** (-(5.0 / m.half_life[f]))
         demand_t = sum(m.dose_MBq[p] * m.S[p, t] for p in m.P if m.phi[p] == f)
 
         if t == 0:
-            # At t=0, no previous inventory, so:
             return m.I[f, 0] == m.x[f, 0] - demand_t
         else:
             return m.I[f, t] == m.I[f, t - 1] * decay_factor + m.x[f, t] - demand_t
+
     model.InventoryBalance = Constraint(model.F, model.T, rule=inventory_balance_rule)
 
-
-    ###############################################################################
-    # (D) Radiopharmaceutical availability
-    ###############################################################################
-    # If (f,t) not in pharma_avail, force x[f,t] = 0
+    # -----------------------
+    # 4.5 Availability Constraints
+    # -----------------------
+    # If t not in pharma_avail[f], force x[f,t] = 0.
+    # If Ga68 is not produced at time t (Gstart[t] = 0), then x['Ga68', t] = 0.
     def rule_availability(m, f, t):
-        if t not in pharma_avail[f]:
-            return m.x[f,t] == 0
-        return pyo.Constraint.Skip
+        if f == 'Ga68':
+            return m.x[f, t] <= BIG_M * m.Gstart[t]
+        elif t not in pharma_avail[f]:
+            return m.x[f, t] == 0
+        else:
+            return pyo.Constraint.Skip
+    model.AvailConstr = Constraint(model.F, model.T, rule=rule_availability)
 
-    model.AvailConstr = Constraint(
-        model.F, model.T,
-        rule=rule_availability
-    )
-
-    ###############################################################################
-    # Objective: Minimize total cost
-    ###############################################################################
-    # cost = sum_f sum_t (cost_f * x[f,t] in GBq)
-    # we have x in MBq, so we do x/1000 => GBq
+    ###########################################################################
+    # 5. Objective Function: Minimize Total Cost
+    ###########################################################################
+    # cost = Σ_f Σ_t cost_f * (x[f,t] in GBq)
+    # but x[f,t] is in MBq → convert MBq to GBq by dividing by 1000.
     def total_cost_rule(m):
-        return sum( m.cost[f] * (m.x[f,t]/1000.0) for f in m.F for t in m.T )
-    model.TotalCost = pyo.Objective(rule=total_cost_rule, sense=pyo.minimize)
+        return sum(m.cost[f] * (m.x[f, t] / 1000.0) for f in m.F for t in m.T)
+    model.TotalCost = Objective(rule=total_cost_rule, sense=pyo.minimize)
 
-    ###############################################################################
-    # Solve
-    ###############################################################################
-    opt = SolverFactory('cbc')   # or 'glpk'
+    ###########################################################################
+    # 6. Solve the Model
+    ###########################################################################
+    opt = SolverFactory('cbc')   # or another solver, e.g. 'glpk' or 'gurobi'
     res = opt.solve(model, tee=True)
 
     print("\nSolver status:", res.solver.status)
     print("Solver termination:", res.solver.termination_condition)
 
-    ###############################################################################
-    # Display results
-    ###############################################################################
+    ###########################################################################
+    # 7. Display and Analyze Results
+    ###########################################################################
     print("\n========== Results ==========\n")
     print(f"Objective (min cost): {pyo.value(model.TotalCost):.3f}\n")
 
     # Patient scheduling
     for p in model.P:
         for t in model.T:
-            if pyo.value(model.S[p,t]) > 0.5:
-                print(f"Patient {p} starts at time {t} (minutes={t*5}) -> pharma={phi[p]}, dose={dose_MBq[p]}MBq")
+            if pyo.value(model.S[p, t]) > 0.5:
+                print(f"Patient {p} starts at time {t} "
+                      f"(actual minutes={t*5}) "
+                      f"-> pharma={model.phi[p]}, "
+                      f"dose={model.dose_MBq[p]} MBq")
 
+    # Purchases/Productions
     print("\nPurchases/Productions x[f,t]: (MBq)")
     for f in model.F:
         for t in model.T:
-            val = pyo.value(model.x[f,t])
-            if val > 1e-6:
+            val = pyo.value(model.x[f, t])
+            if val > 1e-6:  # Print only if significant
                 print(f"  t={t:2d}, {f}: {val:.1f} MBq")
 
+    # Ga68 Generator usage
     print("\nGa68 Generator usage:")
     for t in model.T:
         if pyo.value(model.Gstart[t]) > 0.5:
-            print(f"  Start Ga68 production at t={t}, Gtime={pyo.value(model.Gtime[t])} steps -> total block = warmup({GEN_WARMUP}) + {pyo.value(model.Gtime[t])} + cooldown({GEN_COOLDOWN}) = {GEN_WARMUP + pyo.value(model.Gtime[t]) + GEN_COOLDOWN}")
-
+            gtime_val = pyo.value(model.Gtime[t])
+            print(f"  Start Ga68 production at t={t}, "
+                  f"Gtime={gtime_val} steps -> total block = "
+                  f"warmup({GEN_WARMUP}) + {gtime_val} + cooldown({GEN_COOLDOWN}) "
+                  f"= {GEN_WARMUP + gtime_val + GEN_COOLDOWN}")
