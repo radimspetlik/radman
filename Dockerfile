@@ -1,4 +1,4 @@
-FROM python:3.8-slim
+FROM python:3.10-slim
 
 RUN mkdir /opt/project/
 WORKDIR /opt/project/
@@ -18,7 +18,6 @@ RUN pip3 install pipenv
 
 COPY Pipfile Pipfile.lock ./
 RUN pipenv install --system --deploy
-RUN pip3 install matplotlib==3.10
 
 COPY app app
 COPY start.sh ./
