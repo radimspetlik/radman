@@ -171,6 +171,9 @@ if __name__ == '__main__':
     #     triggered if we produce Ga-68 at time t. We'll approximate it with piecewise.
     model.Gtime = Var(model.T, domain=Integers, bounds=(0, Ge68_num_steps), initialize=0.0)  # some upper bound
 
+    # NEW: Inventory variable for each pharma at each time step
+    model.I = Var(model.F, model.T, domain=NonNegativeReals, initialize=0.0)
+
 
     # Constraint to ensure patient schedule fits within the NUM_STEPS horizon
     def patient_time_horizon_rule(m, p, t):
@@ -263,32 +266,20 @@ if __name__ == '__main__':
         rule=rule_no_scanner_overlap
     )
 
-    ###############################################################################
-    # (C) Dose supply & decay
-    ###############################################################################
-    # If patient p starts at time t, it needs dose_MBq[p] of the pharma phi[p]
-    # at that exact time. The total decayed amount from all prior purchases
-    # must be >= dose_MBq[p].
-    #
-    # Decayed amount from x_{f, tau}, purchased at time tau, observed at time t:
-    #    x_{f, tau} * 2^{ - ( (t - tau)*5 / half_life[f] ) }
-    # because each step = 5 min, half_life in minutes.
 
-    def rule_total_dose_supply(m, f, t):
-        total_dose_required = sum(
-            m.dose_MBq[p] * m.S[p, t]
-            for p in m.P if m.phi[p] == f
-        )
+    # (C) Inventory Balance (replaces the old “DoseConstraint”)
+    #     I[f,t] = Decayed inventory from (t-1) + new x[f,t] − sum of demands at t
 
-        total_available = sum(
-            m.x[f, tau] * 2 ** (-((t - tau) * 5.0 / m.half_life[f]))
-            for tau in range(t + 1)
-        )
+    def inventory_balance_rule(m, f, t):
+        decay_factor = 2 ** (- (5.0 / m.half_life[f]))
+        demand_t = sum(m.dose_MBq[p] * m.S[p, t] for p in m.P if m.phi[p] == f)
 
-        return total_available >= total_dose_required
-
-
-    model.DoseConstraint = Constraint(model.F, model.T, rule=rule_total_dose_supply)
+        if t == 0:
+            # At t=0, no previous inventory, so:
+            return m.I[f, 0] == m.x[f, 0] - demand_t
+        else:
+            return m.I[f, t] == m.I[f, t - 1] * decay_factor + m.x[f, t] - demand_t
+    model.InventoryBalance = Constraint(model.F, model.T, rule=inventory_balance_rule)
 
 
     ###############################################################################
