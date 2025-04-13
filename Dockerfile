@@ -20,13 +20,15 @@ ENV COIN_OR_URL="https://www.coin-or.org/download/binary/OptimizationSuite/COIN-
 
 # Download and extract the archive.
 RUN wget ${COIN_OR_URL} -O coin_or.tar.gz \
-    && tar -xzf coin_or.tar.gz \
+    && mkdir coin \
+    && tar -xzf coin_or.tar.gz -C coin \
     && rm coin_or.tar.gz
 
 # Assume that the extraction produces a directory named "COIN-OR-1.7.4-linux-x86_64-gcc4.7.2-static"
 # (adjust the directory name if it is different).
 RUN ls
-ENV COIN_OR_DIR=/opt/project/COIN-OR-1.7.4-linux-x86_64-gcc4.7.2-static
+ENV COIN_OR_DIR=/opt/project/coin
+RUN ls ${COIN_OR_DIR}
 
 # Update the PATH environment variable to include the bin folder.
 ENV PATH="${COIN_OR_DIR}/bin:${PATH}"
