@@ -13,6 +13,21 @@ RUN apt-get update \
     apt-utils \
     build-essential
 
+# Define the URL for the COIN-OR OptimizationSuite archive.
+ENV COIN_OR_URL="https://www.coin-or.org/download/binary/OptimizationSuite/COIN-OR-1.7.4-linux-x86_64-gcc4.7.2-static.tar.gz"
+
+# Download and extract the archive.
+RUN wget ${COIN_OR_URL} -O coin_or.tar.gz \
+    && tar -xzf coin_or.tar.gz \
+    && rm coin_or.tar.gz
+
+# Assume that the extraction produces a directory named "COIN-OR-1.7.4-linux-x86_64-gcc4.7.2-static"
+# (adjust the directory name if it is different).
+ENV COIN_OR_DIR=/opt/COIN-OR-1.7.4-linux-x86_64-gcc4.7.2-static
+
+# Update the PATH environment variable to include the bin folder.
+ENV PATH="${COIN_OR_DIR}/bin:${PATH}"
+
 RUN pip3 install --upgrade pip setuptools wheel
 RUN pip3 install pipenv
 

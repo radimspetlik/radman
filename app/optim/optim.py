@@ -5,6 +5,7 @@ from flask_login import login_required, current_user
 
 from app.constants import PATIENTS_TABLE, DOSING_SCHEMES_TABLE
 from app.encrypt import get_fernet
+from app.solve_ga_slots import cbc
 from app.table_manager import get_table_manager
 
 optim_bp = Blueprint('optim', __name__, template_folder='templates')
@@ -15,6 +16,10 @@ fernet = get_fernet()
 def do_it():
     user_id = current_user.username
     table_manager = get_table_manager()
+
+    result, ga68_generator = cbc()
+    if result is None:
+        flash("No solution found for the given constraints.", "error")
 
     # Query all patients for the current user.
     patients_list = list(
@@ -43,6 +48,11 @@ def do_it():
 
         timeline = [""] * total_slots
         current_slot = 0
+        if result:
+            # Retrieve the patient's assigned time slot from the result.
+            patient_id = patient.get("RowKey")
+            if patient_id in result:
+                current_slot = result[patient_id] // 10  # Convert to slot index (10-minute intervals)
 
         # Retrieve the dosing scheme record for this patient.
         dosing_scheme_id = patient.get("DosingSchemeID")
@@ -91,5 +101,22 @@ def do_it():
 
         patients_with_timeline.append(patient)
 
+    # -- Build an additional timeline row for the 68Ga generator --
+    # This row uses the ga68_generator tuples where each tuple is (start_time_str, duration_minutes).
+    generator_timeline = [""] * total_slots
+    if ga68_generator:
+        for gen_tuple in ga68_generator:
+            gen_start, gen_duration = gen_tuple  # e.g., ("6:00", 20)
+            try:
+                gen_index = time_slots.index(gen_start)
+            except ValueError:
+                gen_index = 0  # Fallback if the start time is not found in time_slots.
+            gen_blocks = math.ceil(gen_duration / 10) if gen_duration > 0 else 0
+            for _ in range(gen_blocks):
+                if gen_index < total_slots:
+                    generator_timeline[gen_index] = "68Ga"
+                    gen_index += 1
+
     # Render the template with time_slots and patients.
-    return render_template("optim.html", time_slots=time_slots, patients=patients_with_timeline)
+    return render_template("optim.html", time_slots=time_slots, patients=patients_with_timeline,
+                           generator_timeline=generator_timeline)

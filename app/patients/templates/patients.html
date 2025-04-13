@@ -81,7 +81,7 @@
                           {% endif %}
                         </td>
                         <td>{{ dosing_scheme_by_rowkey[patient.DosingSchemeID]['Name'] }}</td>
-                        <td>{{ patient.AdministeredDose }}</td>
+                        <td>{{ "{:.1f}".format(patient.AdministeredDose) }}</td>
                         <td>
                             <div style="display: flex; gap: 5px; align-items: stretch;">
                                 <div style="flex: 1;">

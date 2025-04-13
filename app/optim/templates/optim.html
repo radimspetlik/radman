@@ -72,6 +72,16 @@
           <td colspan="{{ time_slots|length + 1 }}">No patients found.</td>
         </tr>
       {% endfor %}
+        <tr>
+          <td>68Ga</td>
+          {% for cell in generator_timeline %}
+            {% if cell %}
+              <td style="background-color: #4d0000; text-align: center;">{{ cell }}</td>
+            {% else %}
+              <td>&nbsp;</td>
+            {% endif %}
+          {% endfor %}
+        </tr>
     </tbody>
   </table>
 {% endblock %}

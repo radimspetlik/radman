@@ -246,40 +246,9 @@ if __name__ == '__main__':
     # if we don't run the generator for Ga68.
     model.x = Var(model.F, model.T, domain=NonNegativeReals, initialize=0.0)
 
-    # (C) Ga68 Generator Start: Gstart[t] = 1 if a generator run is initiated at time t
-    model.Gstart = Var(model.T, domain=Binary, initialize=0.0)
-
-    # (D) Ga68 Generator run-time (integer steps): Gtime[t]
-    #     The length (in discrete steps) of the run started at time t (if Gstart[t] = 1).
-    #     We'll approximate the yield with a piecewise function.
-    model.Gtime = Var(
-        model.T,
-        domain=Integers,
-        bounds=(0, Ge68_num_steps),
-        initialize=0
-    )
-
-    # (E) Gdur[t] can be used similarly, but you might unify Gtime and Gdur.
-    #     We'll keep it as in the original code, though it may be partially redundant.
-    model.Gdur = Var(
-        model.T,
-        domain=NonNegativeIntegers,
-        bounds=(0, Ge68_num_steps)
-    )
-
     # (F) Inventory for each pharma (f,t)
     #     How many MBq of isotope f are in stock at time t?
     model.I = Var(model.F, model.T, domain=NonNegativeReals, initialize=0.0)
-
-    # (G) The actual yield of Ga68 from run started at t.
-    model.yield_ga68 = Var(model.T, domain=NonNegativeReals)
-
-    # (H) Additional variables used to track the exact time a Ga68 run ends,
-    #     allowing us to place Ga68 into inventory at the correct time step.
-    model.Ga68_arrival = Var(model.T, domain=NonNegativeReals)
-    model.RunEnds = Var(model.T, model.T, domain=Binary)
-    # yield_if_run_ends[t1, t2] is a help variable to handle arrival logic
-    model.yield_if_run_ends = Var(model.T, model.T, domain=NonNegativeReals)
 
     ###########################################################################
     # 4. Define Constraints
@@ -303,106 +272,7 @@ if __name__ == '__main__':
     # 4.2 Ga68 Generator Constraints
     # -----------------------
 
-    # (A) Gdur[t] is only > 0 if we start the generator at t
-    def dur_when_start_rule(m, t):
-        return m.Gdur[t] <= Ge68_num_steps * m.Gstart[t]
-    model.Ga68DurStartLink = Constraint(model.T, rule=dur_when_start_rule)
 
-    BIG_M = NUM_STEPS
-
-    # (B) No overlap: if a run starts at t1, it occupies
-    #     [t1, t1 + GEN_WARMUP + Gtime[t1] + GEN_COOLDOWN - 1].
-    #     Another run cannot start until after that block finishes.
-    def no_generator_overlap_rule(m, t1, t2):
-        if t1 >= t2:
-            return Constraint.Skip
-        return t2 >= t1 + GEN_WARMUP + m.Gtime[t1] + GEN_COOLDOWN \
-               - BIG_M * (2 - m.Gstart[t1] - m.Gstart[t2])
-    model.NoGeneratorOverlap = Constraint(model.T, model.T, rule=no_generator_overlap_rule)
-
-    # (C) We define a piecewise function for x['Ga68', t] in a separate block.
-    #     x['Ga68', t] = some function of Gtime[t].
-    model.Gtime_piecewise = pyo.Block(model.T, rule=Gtime_piecewise_rule)
-
-    # (D) Constrain yield_ga68[t] to match x['Ga68', t]. For clarity, they can be
-    #     the same variable, but we keep them separate in this example.
-    #     yield_ga68[t] = x['Ga68', t], or we can rely on the piecewise.
-    #     We'll skip an explicit equality here since the piecewise has it.
-
-    # (E) Track the actual arrival time of Ga68 product in the inventory.
-    # We use binary RunEnds[t1, t2] to indicate that the generator run
-    # started at t1 finishes exactly at t2. Then we can place yield in
-    # the inventory at t2 (or at t2+1, depending on discrete vs. continuous interpretation).
-    # For demonstration, we add constraints to link these times.
-
-    # Make a small block for the time link constraints:
-    def run_ends_time_link_lower(m, t1, t2):
-        # lower bound
-        if t2 <= t1:
-            return pyo.Constraint.Skip
-        M = 99999
-        lhs = t2 - t1 - GEN_WARMUP - m.Gdur[t1]
-        return lhs >= -M * (1 - m.RunEnds[t1, t2])
-
-    def run_ends_time_link_upper(m, t1, t2):
-        # upper bound
-        if t2 <= t1:
-            return pyo.Constraint.Skip
-        M = 99999
-        lhs = t2 - t1 - GEN_WARMUP - m.Gdur[t1]
-        return lhs <= M * (1 - m.RunEnds[t1, t2])
-
-    model.RunEndsTimeLinkLower = Constraint(model.T, model.T, rule=run_ends_time_link_lower)
-    model.RunEndsTimeLinkUpper = Constraint(model.T, model.T, rule=run_ends_time_link_upper)
-
-    # (F) The yield at (t1) can only be placed if the run truly ends at (t2)
-    BIG_M_yield = max(PW_breakpoints)
-    def yield_if_run_ends_rule(m, t1, t2):
-        return m.yield_if_run_ends[t1, t2] <= m.yield_ga68[t1]
-    model.YieldIfRunEnds_Upp = Constraint(model.T, model.T, rule=yield_if_run_ends_rule)
-
-    def yield_if_run_ends_binary_rule(m, t1, t2):
-        return m.yield_if_run_ends[t1, t2] <= BIG_M_yield * m.RunEnds[t1, t2]
-    model.YieldIfRunEnds_Bin = Constraint(model.T, model.T, rule=yield_if_run_ends_binary_rule)
-
-    def yield_if_run_ends_lower_rule(m, t1, t2):
-        return m.yield_if_run_ends[t1, t2] >= m.yield_ga68[t1] - BIG_M_yield * (1 - m.RunEnds[t1, t2])
-    model.YieldIfRunEnds_Low = Constraint(model.T, model.T, rule=yield_if_run_ends_lower_rule)
-
-    # (G) Ga68 Inventory equation:
-    # I['Ga68', t] = decayed I['Ga68', t-1] + any newly arrived yield at t - consumption at t.
-    def ga68_inventory_rule(m, t):
-        # decay factor per step
-        decay_factor = 2 ** (-(5.0 / half_life_Ga68_minutes))
-        # total demand at time t for Ga68
-        demand_t = sum(m.dose_MBq[p] * m.S[p, t] for p in m.P if m.phi[p] == 'Ga68')
-
-        if t == 0:
-            # At t=0, no previous inventory
-            return m.I['Ga68', 0] == m.Ga68_arrival[0] - demand_t
-        else:
-            return (m.I['Ga68', t] ==
-                m.I['Ga68', t - 1] * decay_factor +
-                m.Ga68_arrival[t] -
-                demand_t
-            )
-    model.Ga68Inventory = Constraint(model.T, rule=ga68_inventory_rule)
-
-
-    # Constraint: Ensure sufficient inventory at patient scheduling time
-    def ga68_inventory_sufficiency_rule(m, t):
-        demand_t = sum(m.dose_MBq[p] * m.S[p, t] for p in m.P if m.phi[p] == 'Ga68')
-        return m.I['Ga68', t] >= demand_t
-    model.Ga68InventorySufficiency = Constraint(model.T, rule=ga68_inventory_sufficiency_rule)
-
-
-    # We still need to define how Ga68_arrival[t] is computed from yield_if_run_ends[t1, t2].
-    # You could sum all yield that ends exactly at t.
-    # That is: Ga68_arrival[t] = sum_{t1} yield_if_run_ends[t1, t],
-    # ensuring t2 == t.
-    def ga68_arrival_def_rule(m, t):
-        return m.Ga68_arrival[t] == sum(m.yield_if_run_ends[t1, t] for t1 in m.T)
-    model.Ga68ArrivalDef = Constraint(model.T, rule=ga68_arrival_def_rule)
 
     # -----------------------
     # 4.3 Patient Scheduling Constraints
@@ -455,15 +325,9 @@ if __name__ == '__main__':
     )
 
     # -----------------------
-    # 4.4 Inventory Constraints (for non-Ga68)
+    # 4.4 Inventory Constraints
     # -----------------------
-    # For each pharma f != Ga68, we do a standard discrete-time inventory balance:
-    #   I[f,t] = decayed I[f,t-1] + x[f,t] - sum(demand at t)
     def inventory_balance_rule(m, f, t):
-        if f == 'Ga68':
-            # We already handle Ga68 separately
-            return pyo.Constraint.Skip
-
         # Decay factor for pharma f per time step (5 minutes)
         decay_factor = 2 ** (-(5.0 / m.half_life[f]))
         demand_t = sum(m.dose_MBq[p] * m.S[p, t] for p in m.P if m.phi[p] == f)
@@ -478,12 +342,8 @@ if __name__ == '__main__':
     # -----------------------
     # 4.5 Availability Constraints
     # -----------------------
-    # If t not in pharma_avail[f], force x[f,t] = 0.
-    # If Ga68 is not produced at time t (Gstart[t] = 0), then x['Ga68', t] = 0.
     def rule_availability(m, f, t):
-        if f == 'Ga68':
-            return m.x[f, t] <= BIG_M * m.Gstart[t]
-        elif t not in pharma_avail[f]:
+        if t not in pharma_avail[f]:
             return m.x[f, t] == 0
         else:
             return pyo.Constraint.Skip
@@ -532,10 +392,3 @@ if __name__ == '__main__':
 
     # Ga68 Generator usage
     print("\nGa68 Generator usage:")
-    for t in model.T:
-        if pyo.value(model.Gstart[t]) > 0.5:
-            gtime_val = pyo.value(model.Gtime[t])
-            print(f"  Start Ga68 production at t={t}, "
-                  f"Gtime={gtime_val} steps -> total block = "
-                  f"warmup({GEN_WARMUP}) + {gtime_val} + cooldown({GEN_COOLDOWN}) "
-                  f"= {GEN_WARMUP + gtime_val + GEN_COOLDOWN}")
