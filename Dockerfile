@@ -25,7 +25,7 @@ RUN wget ${COIN_OR_URL} -O coin_or.tar.gz \
 
 # Assume that the extraction produces a directory named "COIN-OR-1.7.4-linux-x86_64-gcc4.7.2-static"
 # (adjust the directory name if it is different).
-ENV COIN_OR_DIR=/opt/COIN-OR-1.7.4-linux-x86_64-gcc4.7.2-static
+ENV COIN_OR_DIR=/opt/project/COIN-OR-1.7.4-linux-x86_64-gcc4.7.2-static
 
 # Update the PATH environment variable to include the bin folder.
 ENV PATH="${COIN_OR_DIR}/bin:${PATH}"
