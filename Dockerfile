@@ -11,7 +11,9 @@ RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 7638D0442B
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     apt-utils \
-    build-essential
+    build-essential \
+    wget \
+    tar
 
 # Define the URL for the COIN-OR OptimizationSuite archive.
 ENV COIN_OR_URL="https://www.coin-or.org/download/binary/OptimizationSuite/COIN-OR-1.7.4-linux-x86_64-gcc4.7.2-static.tar.gz"
