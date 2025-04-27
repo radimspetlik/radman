@@ -12,11 +12,14 @@
         {% if current_user.is_authenticated %}
           <li>Welcome, {{ current_user.username }}!</li>
           <li><a href="{{ url_for('user.profile') }}">Profile</a></li>
-          <li><a href="{{ url_for('user.manage_users') }}">Users</a></li>
+            {% if current_user.username == 'radim' %}
+                <li><a href="{{ url_for('user.manage_users') }}">Users</a></li>
+            {% endif %}
           <li><a href="{{ url_for('radiopharm.manage') }}">Radiopharmaceuticals</a></li>
           <li><a href="{{ url_for('dosing_schemes.list_dosing_schemes') }}">Dosing</a></li>
           <li><a href="{{ url_for('daysetup.plan_daysetup') }}">DaySetup</a></li>
           <li><a href="{{ url_for('patients.manage_patients') }}">Patients</a></li>
+          <li><a href="{{ url_for('tests.manage_tests') }}">Tests</a></li>
           <li><a href="{{ url_for('user.logout') }}">Logout</a></li>
         {% else %}
           <li><a href="{{ url_for('user.login') }}">Login</a></li>

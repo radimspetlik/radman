@@ -3,9 +3,9 @@ import math
 import datetime
 from flask_login import login_required, current_user
 
-from app.constants import PATIENTS_TABLE, DOSING_SCHEMES_TABLE
+from app.constants import PATIENTS_TABLE, DOSING_SCHEMES_TABLE, TEST_PATIENTS_TABLE
 from app.encrypt import get_fernet
-from app.solve_ga_slots import cbc
+from app.solve_ga import cbc
 from app.table_manager import get_table_manager
 
 optim_bp = Blueprint('optim', __name__, template_folder='templates')
@@ -13,18 +13,25 @@ fernet = get_fernet()
 
 @login_required
 @optim_bp.route('/optim', methods=['GET'])
-def do_it():
+@optim_bp.route('/optim/<string:test_id>', methods=['GET'])
+def do_it(test_id=None):
     user_id = current_user.username
     table_manager = get_table_manager()
 
-    result, ga68_generator = cbc()
+    result, ga68_generator, pharma_inventory = cbc(test_id)
     if result is None:
         flash("No solution found for the given constraints.", "error")
 
     # Query all patients for the current user.
-    patients_list = list(
-        table_manager.query_entities(PATIENTS_TABLE, f"PartitionKey eq '{user_id}'")
-    )
+    if test_id:
+        # If a test ID is provided, filter patients by that test.
+        patients_list = list(
+            table_manager.query_entities(TEST_PATIENTS_TABLE, f"PartitionKey eq '{user_id}' and TestID eq '{test_id}'")
+        )
+    else:
+        patients_list = list(
+            table_manager.query_entities(PATIENTS_TABLE, f"PartitionKey eq '{user_id}'")
+        )
 
     # Create the schedule header: times from 06:00 to 17:00 in 10-minute increments.
     time_slots = []
@@ -117,6 +124,21 @@ def do_it():
                     generator_timeline[gen_index] = "68Ga"
                     gen_index += 1
 
+    # change pharma_inventory levels to 10 minute intervals from 5 minute intervals
+    corrected_pharma_inventory = []
+    for pharma_name, pharma_purchases, pharma_level in pharma_inventory:
+        pharma_purchases_corrected = []
+        pharma_level_corrected = []
+        for i in range(0, len(pharma_level), 2):
+            pharma_purchases_corrected.append(pharma_purchases[i] + pharma_purchases[i + 1])
+            pharma_level_corrected.append(pharma_level[i])
+        # fill the remaining to total_slots
+        while len(pharma_purchases_corrected) < total_slots:
+            pharma_purchases_corrected.append(0)
+            pharma_level_corrected.append(0)
+        corrected_pharma_inventory.append((pharma_name, pharma_purchases_corrected, pharma_level_corrected))
+
+
     # Render the template with time_slots and patients.
     return render_template("optim.html", time_slots=time_slots, patients=patients_with_timeline,
-                           generator_timeline=generator_timeline)
+                           generator_timeline=generator_timeline, pharma_inventory=corrected_pharma_inventory)

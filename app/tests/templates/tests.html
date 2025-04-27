@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Test Suite{% endblock %}
+{% block content %}
+  <h1>Test Suite</h1>
+
+  <h2>Create New Test</h2>
+  <form method="post" action="{{ url_for('tests.manage_tests') }}">
+  <!-- flexbox for input and button -->
+    <div style="display: flex; gap: 20px; align-items: stretch;">
+      <div style="flex: 1;">
+{#        <label for="test_name">Test Name:</label>#}
+        <input type="text" name="test_name" id="test_name" placeholder="Test Name" required>
+      </div>
+      <div style="flex: 1;">
+        <button type="submit" class="btn btn-edit">Add Test</button>
+      </div>
+    </div>
+  </form>
+
+  <h2>Existing Tests</h2>
+  {% if tests %}
+    <table border="1" cellpadding="5" cellspacing="0">
+      <thead>
+        <tr><th>Name</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+      {% for test in tests %}
+        <tr>
+          <td style="width: 10%;">{{ test.Name }}</td>
+          <td style="width: 90%;">
+              <div class="action-buttons">
+                  <div style="display: flex; gap: 5px; align-items: stretch; width: 100%;">
+                      <div style="flex: 3;">
+                          <form method="get"
+                                action="{{ url_for('tests.manage_test_patients', test_id=test.RowKey) }}">
+                              <button class="btn">Manage Patients</button>
+                          </form>
+                      </div>
+                      <div style="flex: 1;">
+                          <form method="get"
+                                action="{{ url_for('tests.edit_test', row_key=test.RowKey) }}">
+                              <button class="btn">Edit</button>
+                          </form>
+                      </div>
+                      <div style="flex: 1;">
+                          <form method="post"
+                                action="{{ url_for('tests.delete_test', row_key=test.RowKey) }}"
+                                onsubmit="return confirm('Delete this test and its patients?');"
+                                style="display:inline;">
+                              <button class="btn btn-delete">Delete</button>
+                          </form>
+                      </div>
+                      <div style="flex: 1;">
+                          <form method="get"
+                                action="{{ url_for('optim.do_it', test_id=test.RowKey) }}">
+                              <button class="btn btn-optimize">Test</button>
+                          </form>
+                      </div>
+                  </div>
+              </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No tests defined yet.</p>
+  {% endif %}
+<br>
+  <form method="post" action="{{ url_for('tests.clear_tests') }}"
+        onsubmit="return confirm('Clear all tests and their patients?');">
+    <button class="btn btn-delete">Clear All Tests</button>
+  </form>
+{% endblock %}

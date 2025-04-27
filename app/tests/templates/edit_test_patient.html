@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Edit Patient{% endblock %}
+{% block content %}
+    <h1>Edit Patient</h1>
+    <form method="post" action="{{ url_for('tests.edit_test_patient', test_id=test.RowKey, row_key=patient.RowKey) }}">
+        <div style="display: flex; gap: 20px; align-items: flex-start;">
+            <div>
+                <label for="surname">Surname:</label>
+                <input type="text" name="surname" id="surname" value="{{ patient.Surname }}" required>
+            </div>
+            <div>
+                <label for="given_name">Name:</label>
+                <input type="text" name="given_name" id="given_name" value="{{ patient.GivenName }}" required>
+            </div>
+            <div>
+                <label for="identification">Identification Number:</label>
+                <input type="text" name="identification" id="identification" value="{{ patient.Identification }}"
+                       required>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 20px; align-items: flex-start; margin-top: 10px;">
+            <div>
+                <label for="weight">Weight (kg):</label>
+                <input type="number" step="any" name="weight" id="weight" value="{{ patient.Weight }}" required
+                       oninput="computeDoseEdit()">
+            </div>
+            <div>
+                <label for="radiopharmaceutical">Radiopharmaceutical:</label>
+                <select name="radiopharmaceutical" id="radiopharmaceutical" onchange="filterDosingSchemesEdit()"
+                        required>
+                    <option value="">-- Select a radiopharmaceutical --</option>
+                    {% for rad in available_radiopharmaceuticals %}
+                        <option value="{{ rad }}"
+                                {% if rad == current_radiopharmaceutical %}selected{% endif %}>{{ rad }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="dosing_scheme">Dosing Scheme:</label>
+                <select name="dosing_scheme" id="dosing_scheme" onchange="computeDoseEdit()"
+                        {% if not current_radiopharmaceutical %}disabled{% endif %} required>
+                    <option value="">-- Select a dosing scheme --</option>
+                    {# Options will be populated via JavaScript #}
+                </select>
+            </div>
+        </div>
+
+        <p>
+            <strong>Computed Administered Dose:</strong>
+            <span id="administered_dose_display_edit">0 MBq</span>
+        </p>
+
+        <button type="submit">Update Patient</button>
+    </form>
+
+    <script>
+        // Full dosing schemes data provided from the server.
+        var dosingSchemesData = {{ dosing_schemes|tojson }};
+
+        function filterDosingSchemesEdit() {
+            var radSelect = document.getElementById("radiopharmaceutical");
+            var dosingSelect = document.getElementById("dosing_scheme");
+            var selectedRad = radSelect.value;
+
+            // Clear previous options.
+            dosingSelect.innerHTML = '';
+            if (selectedRad === "") {
+                dosingSelect.disabled = true;
+                document.getElementById("administered_dose_display_edit").textContent = "0 MBq";
+                return;
+            } else {
+                dosingSelect.disabled = false;
+            }
+
+            // Add dosing schemes that match the selected radiopharmaceutical.
+            for (var i = 0; i < dosingSchemesData.length; i++) {
+                if (dosingSchemesData[i].Radiopharmaceutical === selectedRad) {
+                    var option = document.createElement("option");
+                    option.value = dosingSchemesData[i].RowKey;
+                    option.text = dosingSchemesData[i].Name;
+                    option.setAttribute("data-dosevalue", dosingSchemesData[i].DoseValue);
+                    option.setAttribute("data-dosetype", dosingSchemesData[i].DoseType);
+                    // Pre-select if this option matches the patient’s dosing scheme.
+                    {% if patient.DosingSchemeID %}
+                        if (dosingSchemesData[i].RowKey === "{{ patient.DosingSchemeID }}") {
+                            option.selected = true;
+                        }
+                    {% endif %}
+                    dosingSelect.appendChild(option);
+                }
+            }
+            // If no option was preselected, automatically select the first one.
+            if (dosingSelect.options.length > 0 && dosingSelect.selectedIndex === -1) {
+                dosingSelect.selectedIndex = 0;
+            }
+            computeDoseEdit();
+        }
+
+
+        function computeDoseEdit() {
+            var weightInput = document.getElementById("weight");
+            var dosingSelect = document.getElementById("dosing_scheme");
+            var display = document.getElementById("administered_dose_display_edit");
+
+            var weight = parseFloat(weightInput.value);
+            if (isNaN(weight)) {
+                weight = 0;
+            }
+            var selectedOption = dosingSelect.options[dosingSelect.selectedIndex];
+            if (!selectedOption || selectedOption.value === "") {
+                display.textContent = "0 MBq";
+                return;
+            }
+            var doseValue = parseFloat(selectedOption.getAttribute("data-dosevalue"));
+            var doseType = selectedOption.getAttribute("data-dosetype");
+            var administered = 0;
+            if (doseType === "per_kg") {
+                administered = doseValue * weight;
+            } else {
+                administered = doseValue;
+            }
+            display.textContent = administered.toFixed(2) + " MBq";
+        }
+
+        // On page load, populate the dosing scheme dropdown.
+        window.onload = filterDosingSchemesEdit;
+    </script>
+{% endblock %}

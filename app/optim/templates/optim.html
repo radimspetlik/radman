@@ -72,8 +72,12 @@
           <td colspan="{{ time_slots|length + 1 }}">No patients found.</td>
         </tr>
       {% endfor %}
+      <tr>
+          <!-- single row with title "Inventory" -->
+            <th colspan="{{ time_slots|length + 1 }}" style="text-align: left; font-weight: bold;">Inventory</th>
+      </tr>
         <tr>
-          <td>68Ga</td>
+          <td>Ga68 RUN</td>
           {% for cell in generator_timeline %}
             {% if cell %}
               <td style="background-color: #4d0000; text-align: center;">{{ cell }}</td>
@@ -82,6 +86,27 @@
             {% endif %}
           {% endfor %}
         </tr>
+    {% for pharma_name, pharma_purchases, pharma_levels in pharma_inventory %}
+        <tr>
+          <td>{{ pharma_name }}</td>
+          {% for cell in pharma_levels %}
+            {% if cell %}
+              <td style="background-color: #003f4d; text-align: center;">{{ cell }}</td>
+            {% else %}
+              <td>&nbsp;</td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+        <tr>
+            <td>{{ pharma_name }}</td>
+            {% for cell in pharma_purchases %}
+                {% if cell %}
+                    <td style="background-color: #00244d; text-align: center;">{{ cell }}</td>
+                {% else %}
+                    <td>&nbsp;</td>
+                {% endif %}
+            {% endfor %}
+      {% endfor %}
     </tbody>
   </table>
 {% endblock %}

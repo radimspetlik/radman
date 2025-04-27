@@ -7,6 +7,7 @@ from app.optim.optim import optim_bp
 from app.patients.patients import patients_bp
 from app.radiopharmaceutical.radiopharmaceutical import radiopharm_bp
 from app.table_manager import get_table_manager
+from app.tests.tests import tests_bp
 
 SECRET = os.environ['SECRET_KEY']
 _LOGIN_MANAGER = None
@@ -30,6 +31,7 @@ def init_app(app):
     app.register_blueprint(daysetup_bp, url_prefix="/daysetup")
     app.register_blueprint(patients_bp, url_prefix="/patients")
     app.register_blueprint(optim_bp, url_prefix="/optim")
+    app.register_blueprint(tests_bp, url_prefix="/tests")
 
     table_manager = get_table_manager()
     try:
@@ -57,6 +59,16 @@ def init_app(app):
         app.logger.info("Azure table 'patients' created or already exists.")
     except Exception as e:
         app.logger.error("Failed to create azure table 'patients': %s", e)
+    try:
+        table_manager.create_table(TESTS_TABLE)
+        app.logger.info("Azure table 'tests' created or already exists.")
+    except Exception as e:
+        app.logger.error("Failed to create azure table 'tests': %s", e)
+    try:
+        table_manager.create_table(TEST_PATIENTS_TABLE)
+        app.logger.info("Azure table 'test_patients' created or already exists.")
+    except Exception as e:
+        app.logger.error("Failed to create azure table 'test_patients': %s", e)
 
 
 

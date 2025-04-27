@@ -11,20 +11,20 @@ radiopharm_bp = Blueprint('radiopharm', __name__, template_folder='templates')
 
 # Default set of pharmaceuticals that each user starts with if none exist.
 DEFAULT_TYPES = [
-    '18F-FDG',
-    '18F-PSMA',
-    '18F-FET',
-    '18F-Cholin',
-    '18F-NaF',
-    '18F-FDOPA',
-    '18F-Vizamyl (fluemetamol)',
-    '68Ga-DOTATOC',
-    '68Ga-PSMA-11',
-    '68Ga-FAPI',
-    '11C-Cholin',
-    '11C-Methionin',
-    '15O-H2O',
-    '13N-NH3'
+    ('18F-FDG', 109.8),
+    ('18F-PSMA', 109.8),
+    ('18F-FET', 109.8),
+    ('18F-Cholin', 109.8),
+    ('18F-NaF', 109.8),
+    ('18F-FDOPA', 109.8),
+    ('18F-Vizamyl (fluemetamol)', 109.8),
+    ('68Ga-DOTATOC', 67.7),
+    ('68Ga-PSMA-11', 67.7),
+    ('68Ga-FAPI', 67.7),
+    ('11C-Cholin', 20.4),
+    ('11C-Methionin', 20.4),
+    ('15O-H2O', 2.03),
+    ('13N-NH3', 9.96),
 ]
 
 @radiopharm_bp.route('/manage', methods=['GET'])
@@ -43,14 +43,14 @@ def manage():
     # If no record exists, populate defaults.
     if not existing_records:
         records = []
-        for pharm_type in sorted(DEFAULT_TYPES):
+        for pharm_type, half_life in sorted(DEFAULT_TYPES):
             # Use a new UUID as row key.
             row_key = str(uuid.uuid4())
             records.append({
                 'PartitionKey': partition_key,
                 'RowKey': row_key,
                 'type': pharm_type,
-                'half_life': "",  # New half life parameter (in mins)
+                'half_life': half_life,  # New half life parameter (in mins)
                 'price': "",
                 'time_slots': json.dumps(["anytime"])  # Default time slot stored as JSON.
             })
