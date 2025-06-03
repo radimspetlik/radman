@@ -5,6 +5,24 @@
 {% block content %}
   <h1>Manage PET Radiotracer Dosing Schemes</h1>
 
+  <div class="pure-g" style="margin-bottom: 1em;">
+    <form method="POST" action="{{ url_for('dosing_schemes.change_set') }}" class="pure-form pure-form-inline">
+      <div class="pure-u-1-5">
+        <strong>Current Set:</strong>
+      </div>
+      <div class="pure-u-1-5">
+        <select id="attribute_set_selector" name="attribute_set_selector" onchange="this.form.submit()">
+          {% for set_name in all_sets %}
+            <option value="{{ set_name }}" {% if set_name == current_set %}selected{% endif %}>{{ set_name }}</option>
+          {% endfor %}
+        </select>
+        <noscript>
+          <button type="submit" class="pure-button pure-button-primary">Switch</button>
+        </noscript>
+      </div>
+    </form>
+  </div>
+
   {% if action == 'add' %}
     <h2>Add New Dosing Scheme</h2>
     <form method="post" action="{{ url_for('dosing_schemes.add_dosing_scheme') }}" class="dosing-scheme-form">
@@ -59,7 +77,7 @@
         <select name="radiopharmaceutical" id="radiopharmaceutical" required class="form-control">
           <option value="">Select a Radiopharmaceutical</option>
           {% for rad in radiopharmaceuticals %}
-            <option value="{{ rad.RowKey }}" {% if scheme.Radiopharmaceutical == rad.RowKey %}selected{% endif %}>{{ rad.type }}</option>
+            <option value="{{ rad.type }}" {% if scheme.Radiopharmaceutical == rad.type %}selected{% endif %}>{{ rad.type }}</option>
           {% endfor %}
         </select>
       </div>
