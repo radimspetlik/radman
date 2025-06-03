@@ -2,7 +2,7 @@
 {% block title %}Edit Patient{% endblock %}
 {% block content %}
     <h1>Edit Patient</h1>
-    <form method="post" action="{{ url_for('patients.edit_patient', row_key=patient.RowKey) }}">
+    <form method="post" action="{{ url_for('patients.edit_patient', index=index) }}">
         <div style="display: flex; gap: 20px; align-items: flex-start;">
             <div>
                 <label for="surname">Surname:</label>
