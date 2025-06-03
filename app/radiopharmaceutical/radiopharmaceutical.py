@@ -332,6 +332,52 @@ def rename_set():
     return redirect(url_for('radiopharm.manage'))
 
 
+@radiopharm_bp.route('/manage/delete_set', methods=['POST'])
+@login_required
+def delete_set():
+    table_mgr = get_table_manager()
+    username = current_user.username
+    current = _get_current_set_name(table_mgr, username)
+
+    if not current:
+        flash("No current set found.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    # Fetch all existing sets for this user
+    all_sets = list(table_mgr.query_entities(
+        PHARM_TABLE,
+        query=f"PartitionKey eq '{username}'"
+    ))
+
+    if len(all_sets) <= 1:
+        flash("Cannot delete the only set.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    try:
+        current_ent = table_mgr.get_entity(PHARM_TABLE, username, current)
+    except Exception:
+        flash("Could not load current set.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    try:
+        table_mgr.delete_entities(PHARM_TABLE, [current_ent])
+    except Exception as e:
+        current_app.logger.error("Failed to delete set: %s", e)
+        flash("Could not delete set.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    remaining_names = [ent['RowKey'] for ent in all_sets if ent['RowKey'] != current]
+    new_current = remaining_names[0] if remaining_names else None
+    try:
+        if new_current:
+            _set_current_set_name(table_mgr, username, new_current)
+    except Exception:
+        flash("Deleted set, but failed to update pointer.", "warning")
+
+    flash(f"Deleted set '{current}'.", "success")
+    return redirect(url_for('radiopharm.manage'))
+
+
 @radiopharm_bp.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_radiopharm():

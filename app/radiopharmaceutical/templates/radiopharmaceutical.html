@@ -27,6 +27,13 @@
     </form>
 
     <div class="pure-u-1-5">
+      <form method="POST" action="{{ url_for('radiopharm.delete_set') }}" id="delete-form" class="pure-form">
+        <button type="submit"
+                class="pure-button pure-button-primary"
+                onclick="return confirm('Are you sure you want to delete this set?');">
+          Delete Set
+        </button>
+      </form>
     </div>
 
   {# ─────────── 2) Clone Current Set (with prompt) ─────────── #}
