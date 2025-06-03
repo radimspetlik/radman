@@ -90,7 +90,11 @@
           <td>{{ record.half_life }}</td>
           <td>{{ record.price }}</td>
           <td>{{ record.time_slots | join(', ') }}</td>
-          <td>mins + % / abs (act)</td>
+          <td>
+            {% if record.qc_amount %}
+              {{ record.qc_amount }}{% if record.qc_unit == 'percent' %}%{% else %} MBq{% endif %} / {{ record.qc_time }} min
+            {% endif %}
+          </td>
           <td>
             <div class="action-buttons" style="display: flex; gap: 0.5em;">
               <a href="{{ url_for('radiopharm.edit_radiopharm', index=loop.index0) }}">

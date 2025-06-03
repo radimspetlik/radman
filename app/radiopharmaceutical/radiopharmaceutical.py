@@ -75,7 +75,10 @@ def _ensure_at_least_one_set(table_mgr, username):
                 'type': pharm_type,
                 'half_life': half_life,
                 'price': "",
-                'time_slots': ["anytime"]
+                'time_slots': ["anytime"],
+                'qc_amount': "",
+                'qc_unit': "percent",
+                'qc_time': ""
             }
             for pharm_type, half_life in sorted(DEFAULT_TYPES)
         ]
@@ -158,13 +161,16 @@ def manage():
     except Exception:
         pharm_list = []
 
-    # Ensure each 'time_slots' is a list
+    # Ensure 'time_slots' is a list and QC fields exist
     for item in pharm_list:
         if 'time_slots' in item and not isinstance(item['time_slots'], list):
             try:
                 item['time_slots'] = json.loads(item['time_slots'])
             except Exception:
                 item['time_slots'] = []
+        item.setdefault('qc_amount', "")
+        item.setdefault('qc_unit', "percent")
+        item.setdefault('qc_time', "")
 
     return render_template(
         'radiopharmaceutical.html',
@@ -328,6 +334,9 @@ def add_radiopharm():
         half_life = request.form.get('half_life', "")
         price = request.form.get('price', "")
         time_slots = request.form.getlist('time_slots')
+        qc_amount = request.form.get('qc_amount', "")
+        qc_unit = request.form.get('qc_unit', "percent")
+        qc_time = request.form.get('qc_time', "")
 
         try:
             ent = table_mgr.get_entity(PHARM_TABLE, username, current_set)
@@ -339,7 +348,10 @@ def add_radiopharm():
             'type': name,
             'half_life': half_life,
             'price': price,
-            'time_slots': time_slots
+            'time_slots': time_slots,
+            'qc_amount': qc_amount,
+            'qc_unit': qc_unit,
+            'qc_time': qc_time
         })
 
         updated_ent = {
@@ -382,12 +394,18 @@ def edit_radiopharm(index):
         half_life = request.form.get('half_life', "")
         price = request.form.get('price', "")
         time_slots = request.form.getlist('time_slots')
+        qc_amount = request.form.get('qc_amount', "")
+        qc_unit = request.form.get('qc_unit', "percent")
+        qc_time = request.form.get('qc_time', "")
 
         pharm_list[index] = {
             'type': name,
             'half_life': half_life,
             'price': price,
-            'time_slots': time_slots
+            'time_slots': time_slots,
+            'qc_amount': qc_amount,
+            'qc_unit': qc_unit,
+            'qc_time': qc_time
         }
 
         updated_ent = {
@@ -405,6 +423,9 @@ def edit_radiopharm(index):
         return redirect(url_for('radiopharm.manage'))
 
     record = pharm_list[index]
+    record.setdefault('qc_amount', "")
+    record.setdefault('qc_unit', "percent")
+    record.setdefault('qc_time', "")
     return render_template('edit_radiopharm.html', record=record, index=index)
 
 
