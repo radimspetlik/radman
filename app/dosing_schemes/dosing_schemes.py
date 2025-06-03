@@ -4,8 +4,50 @@ from flask import render_template, request, redirect, url_for, flash, session, B
 from flask_login import current_user, login_required
 from app.constants import DOSING_SCHEMES_TABLE, PHARM_TABLE
 from app.table_manager import get_table_manager
+from app.radiopharmaceutical.radiopharmaceutical import (
+    _get_current_set_name,
+    _set_current_set_name,
+    _ensure_at_least_one_set,
+)
 
 dosing_bp = Blueprint('dosing_schemes', __name__, template_folder='templates')
+
+
+def _load_set_data(table_mgr, username):
+    """Return (current_set, all_set_names, pharm_list)"""
+    current = _get_current_set_name(table_mgr, username)
+    default = _ensure_at_least_one_set(table_mgr, username)
+    if default is None:
+        return "", [], []
+    if current is None:
+        current = default
+        try:
+            _set_current_set_name(table_mgr, username, current)
+        except Exception:
+            pass
+    else:
+        try:
+            table_mgr.get_entity(PHARM_TABLE, username, current)
+        except Exception:
+            current = default
+            try:
+                _set_current_set_name(table_mgr, username, current)
+            except Exception:
+                pass
+
+    all_sets_entities = list(table_mgr.query_entities(
+        PHARM_TABLE,
+        query=f"PartitionKey eq '{username}'"
+    ))
+    all_names = [ent['RowKey'] for ent in all_sets_entities]
+
+    try:
+        ent = table_mgr.get_entity(PHARM_TABLE, username, current)
+        pharm_list = json.loads(ent.get('pharm_data', '[]'))
+    except Exception:
+        pharm_list = []
+
+    return current, all_names, pharm_list
 
 
 @dosing_bp.route('/dosing_schemes', methods=['GET'])
@@ -49,9 +91,7 @@ def list_dosing_schemes():
         # Requery after pre-filling.
         schemes = list(table_manager.query_entities(DOSING_SCHEMES_TABLE, query))
 
-    # Get list of radiopharmaceuticals for the user from PHARM_TABLE.
-    radiopharms = list(table_manager.query_entities(PHARM_TABLE, f"PartitionKey eq '{user_id}'"))
-    radiopharms = json.loads(radiopharms[0].get('pharm_data', '[]'))
+    current_set, all_sets, radiopharms = _load_set_data(table_manager, user_id)
     radiopharms_dict = {rec['type']: rec['type'] for rec in radiopharms}
     schemes = [
         {**scheme, 'Radiopharmaceutical': radiopharms_dict.get(scheme['Radiopharmaceutical'], scheme['Radiopharmaceutical'])}
@@ -59,7 +99,40 @@ def list_dosing_schemes():
     ]
 
     schemes = sorted(schemes, key=lambda x: x['Name'])
-    return render_template('dosing_schemes.html', schemes=schemes)
+    return render_template(
+        'dosing_schemes.html',
+        schemes=schemes,
+        current_set=current_set,
+        all_sets=all_sets,
+        radiopharmaceuticals=radiopharms,
+    )
+
+
+@dosing_bp.route('/dosing_schemes/change_set', methods=['POST'])
+@login_required
+def change_set():
+    """Update the current radiopharmaceutical attribute set pointer."""
+    table_mgr = get_table_manager()
+    user_id = current_user.username
+    selected = request.form.get('attribute_set_selector')
+
+    if not selected:
+        flash("No set selected.", "error")
+        return redirect(url_for('dosing_schemes.list_dosing_schemes'))
+
+    try:
+        table_mgr.get_entity(PHARM_TABLE, user_id, selected)
+    except Exception:
+        flash("That set no longer exists.", "error")
+        return redirect(url_for('dosing_schemes.list_dosing_schemes'))
+
+    try:
+        _set_current_set_name(table_mgr, user_id, selected)
+        flash(f"Switched to set '{selected}'.", "info")
+    except Exception:
+        flash("Could not switch sets. Check logs.", "error")
+
+    return redirect(url_for('dosing_schemes.list_dosing_schemes'))
 
 
 @dosing_bp.route('/dosing_schemes/add', methods=['GET', 'POST'])
@@ -69,9 +142,7 @@ def add_dosing_scheme():
     user_id = current_user.username
     table_manager = get_table_manager()
 
-    # Get list of radiopharmaceuticals for the user from PHARM_TABLE.
-    radiopharms = list(table_manager.query_entities(PHARM_TABLE, f"PartitionKey eq '{user_id}'"))
-    # Sort radiopharmaceuticals by the 'type' field.
+    current_set, all_sets, radiopharms = _load_set_data(table_manager, user_id)
     radiopharms = sorted(radiopharms, key=lambda x: x.get('type', ''))
 
     if request.method == 'POST':
@@ -107,7 +178,13 @@ def add_dosing_scheme():
         return redirect(url_for('dosing_schemes.list_dosing_schemes'))
 
     # When GET request, render the form in "add" mode.
-    return render_template('dosing_schemes.html', action='add', radiopharmaceuticals=radiopharms)
+    return render_template(
+        'dosing_schemes.html',
+        action='add',
+        radiopharmaceuticals=radiopharms,
+        current_set=current_set,
+        all_sets=all_sets,
+    )
 
 
 @dosing_bp.route('/dosing_schemes/edit/<row_key>', methods=['GET', 'POST'])
@@ -121,8 +198,7 @@ def edit_dosing_scheme(row_key):
         flash("Dosing scheme not found.", "error")
         return redirect(url_for('dosing_schemes.list_dosing_schemes'))
 
-    # Get list of radiopharmaceuticals for the user.
-    radiopharms = list(table_manager.query_entities(PHARM_TABLE, f"PartitionKey eq '{user_id}'"))
+    current_set, all_sets, radiopharms = _load_set_data(table_manager, user_id)
     radiopharms = sorted(radiopharms, key=lambda x: x.get('type', ''))
 
     if request.method == 'POST':
@@ -143,7 +219,14 @@ def edit_dosing_scheme(row_key):
         flash("Dosing scheme updated successfully.", "success")
         return redirect(url_for('dosing_schemes.list_dosing_schemes'))
 
-    return render_template('dosing_schemes.html', action='edit', scheme=scheme, radiopharmaceuticals=radiopharms)
+    return render_template(
+        'dosing_schemes.html',
+        action='edit',
+        scheme=scheme,
+        radiopharmaceuticals=radiopharms,
+        current_set=current_set,
+        all_sets=all_sets,
+    )
 
 
 @dosing_bp.route('/dosing_schemes/delete/<row_key>', methods=['POST'])
