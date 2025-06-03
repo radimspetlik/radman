@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Edit Radionuclide{% endblock %}
+{% block content %}
+<h2>Edit Radionuclide</h2>
+<form method="post" action="{{ url_for('radionuclides.edit_radionuclide', row_key=radionuclide.RowKey) }}">
+  <div>
+    <label>Name:</label> {{ radionuclide.RowKey }}
+  </div>
+  <div>
+    <label for="half_life">Half life (min):</label>
+    <input type="number" step="any" name="half_life" id="half_life" value="{{ radionuclide.half_life }}" required>
+  </div>
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

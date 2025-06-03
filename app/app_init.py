@@ -6,6 +6,7 @@ from app.dosing_schemes.dosing_schemes import dosing_bp
 from app.optim.optim import optim_bp
 from app.patients.patients import patients_bp
 from app.radiopharmaceutical.radiopharmaceutical import radiopharm_bp
+from app.radionuclide.radionuclide import radionuclide_bp
 from app.table_manager import get_table_manager
 from app.tests.tests import tests_bp
 
@@ -26,6 +27,7 @@ def init_app(app):
     login_manager.init_app(app)
 
     app.register_blueprint(user_bp)
+    app.register_blueprint(radionuclide_bp, url_prefix="/radionuclides")
     app.register_blueprint(radiopharm_bp, url_prefix="/radiopharm")
     app.register_blueprint(dosing_bp, url_prefix="/dosing")
     app.register_blueprint(daysetup_bp, url_prefix="/daysetup")
@@ -44,6 +46,11 @@ def init_app(app):
         app.logger.info("Azure table 'pharmaceutical' created or already exists.")
     except Exception as e:
         app.logger.error("Failed to create azure table 'pharmaceutical': %s", e)
+    try:
+        table_manager.create_table(RADIONUCLIDE_TABLE)
+        app.logger.info("Azure table 'radionuclides' created or already exists.")
+    except Exception as e:
+        app.logger.error("Failed to create azure table 'radionuclides': %s", e)
     try:
         table_manager.create_table(DOSING_SCHEMES_TABLE)
         app.logger.info("Azure table 'dosing_schemes' created or already exists.")

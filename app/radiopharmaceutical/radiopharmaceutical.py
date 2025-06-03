@@ -4,26 +4,26 @@ import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 
-from app.constants import PHARM_TABLE, DAYSETUP_TABLE
+from app.constants import PHARM_TABLE, DAYSETUP_TABLE, RADIONUCLIDE_TABLE
 from app.table_manager import get_table_manager
 
 radiopharm_bp = Blueprint('radiopharm', __name__, template_folder='templates')
 
 DEFAULT_TYPES = [
-    ('18F-FDG', 109.8),
-    ('18F-PSMA', 109.8),
-    ('18F-FET', 109.8),
-    ('18F-Cholin', 109.8),
-    ('18F-NaF', 109.8),
-    ('18F-FDOPA', 109.8),
-    ('18F-Vizamyl (fluemetamol)', 109.8),
-    ('68Ga-DOTATOC', 67.7),
-    ('68Ga-PSMA-11', 67.7),
-    ('68Ga-FAPI', 67.7),
-    ('11C-Cholin', 20.4),
-    ('11C-Methionin', 20.4),
-    ('15O-H2O', 2.03),
-    ('13N-NH3', 9.96),
+    ('FDG', '18F'),
+    ('PSMA', '18F'),
+    ('FET', '18F'),
+    ('Cholin', '18F'),
+    ('NaF', '18F'),
+    ('FDOPA', '18F'),
+    ('Vizamyl (fluemetamol)', '18F'),
+    ('DOTATOC', '68Ga'),
+    ('PSMA-11', '68Ga'),
+    ('FAPI', '68Ga'),
+    ('Cholin', '11C'),
+    ('Methionin', '11C'),
+    ('H2O', '15O'),
+    ('NH3', '13N'),
 ]
 
 
@@ -70,18 +70,23 @@ def _ensure_at_least_one_set(table_mgr, username):
 
     if not existing_sets:
         # Nothing exists → build a single "Default" set (rowkey = "Default")
-        default_list = [
-            {
+        default_list = []
+        for pharm_type, nuclide in sorted(DEFAULT_TYPES):
+            try:
+                rad = table_mgr.get_entity(RADIONUCLIDE_TABLE, username, nuclide)
+                hl = rad.get('half_life')
+            except Exception:
+                hl = ""
+            default_list.append({
                 'type': pharm_type,
-                'half_life': half_life,
+                'radionuclide': nuclide,
+                'half_life': hl,
                 'price': "",
                 'time_slots': ["anytime"],
                 'qc_amount': "",
                 'qc_unit': "percent",
                 'qc_time': ""
-            }
-            for pharm_type, half_life in sorted(DEFAULT_TYPES)
-        ]
+            })
         new_entity = {
             'PartitionKey': username,
             'RowKey': "Default",
@@ -168,6 +173,14 @@ def manage():
                 item['time_slots'] = json.loads(item['time_slots'])
             except Exception:
                 item['time_slots'] = []
+        # lookup half-life from radionuclide table if possible
+        rad_name = item.get('radionuclide')
+        if rad_name:
+            try:
+                rad = table_mgr.get_entity(RADIONUCLIDE_TABLE, username, rad_name)
+                item['half_life'] = rad.get('half_life')
+            except Exception:
+                pass
         item.setdefault('qc_amount', "")
         item.setdefault('qc_unit', "percent")
         item.setdefault('qc_time', "")
@@ -329,9 +342,17 @@ def add_radiopharm():
         flash("No current set found.", "error")
         return redirect(url_for('radiopharm.manage'))
 
+    radionuclides = list(table_mgr.query_entities(RADIONUCLIDE_TABLE, f"PartitionKey eq '{username}'"))
+    radionuclides = sorted(radionuclides, key=lambda r: r['RowKey'])
+
     if request.method == 'POST':
         name = request.form.get('name')
-        half_life = request.form.get('half_life', "")
+        radionuclide = request.form.get('radionuclide')
+        try:
+            rad = table_mgr.get_entity(RADIONUCLIDE_TABLE, username, radionuclide)
+            half_life = rad.get('half_life')
+        except Exception:
+            half_life = ""
         price = request.form.get('price', "")
         time_slots = request.form.getlist('time_slots')
         qc_amount = request.form.get('qc_amount', "")
@@ -346,6 +367,7 @@ def add_radiopharm():
 
         pharm_list.append({
             'type': name,
+            'radionuclide': radionuclide,
             'half_life': half_life,
             'price': price,
             'time_slots': time_slots,
@@ -368,7 +390,7 @@ def add_radiopharm():
 
         return redirect(url_for('radiopharm.manage'))
 
-    return render_template('add_radiopharm.html')
+    return render_template('add_radiopharm.html', radionuclides=radionuclides)
 
 
 @radiopharm_bp.route('/edit/<int:index>', methods=['GET', 'POST'])
@@ -389,9 +411,17 @@ def edit_radiopharm(index):
         flash("Invalid item index.", "error")
         return redirect(url_for('radiopharm.manage'))
 
+    radionuclides = list(table_mgr.query_entities(RADIONUCLIDE_TABLE, f"PartitionKey eq '{username}'"))
+    radionuclides = sorted(radionuclides, key=lambda r: r['RowKey'])
+
     if request.method == 'POST':
         name = request.form.get('name')
-        half_life = request.form.get('half_life', "")
+        radionuclide = request.form.get('radionuclide')
+        try:
+            rad = table_mgr.get_entity(RADIONUCLIDE_TABLE, username, radionuclide)
+            half_life = rad.get('half_life')
+        except Exception:
+            half_life = ""
         price = request.form.get('price', "")
         time_slots = request.form.getlist('time_slots')
         qc_amount = request.form.get('qc_amount', "")
@@ -400,6 +430,7 @@ def edit_radiopharm(index):
 
         pharm_list[index] = {
             'type': name,
+            'radionuclide': radionuclide,
             'half_life': half_life,
             'price': price,
             'time_slots': time_slots,
@@ -426,7 +457,7 @@ def edit_radiopharm(index):
     record.setdefault('qc_amount', "")
     record.setdefault('qc_unit', "percent")
     record.setdefault('qc_time', "")
-    return render_template('edit_radiopharm.html', record=record, index=index)
+    return render_template('edit_radiopharm.html', record=record, index=index, radionuclides=radionuclides)
 
 
 @radiopharm_bp.route('/delete/<int:index>', methods=['POST'])
