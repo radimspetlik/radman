@@ -20,6 +20,20 @@
             <input type="date" name="generator_date" id="generator_date"
                    value="{{ generator_date }}" required>
         </div>
+        <div class="inline-field">
+            <label for="generator_activity">
+                Cool Down (minutes):
+            </label>
+            <input type="number" step="any" name="cool_down" id="cool_down"
+                   value="" required>
+        </div>
+        <div class="inline-field">
+            <label for="qc">
+                QC (%):
+            </label>
+            <input type="number" step="any" name="qc" id="qc"
+                   value="" required>
+        </div>
 
         <button type="submit">Save Day Setup</button>
     </form>

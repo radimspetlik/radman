@@ -4,12 +4,11 @@ import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 
-from app.constants import PHARM_TABLE
+from app.constants import PHARM_TABLE, DAYSETUP_TABLE
 from app.table_manager import get_table_manager
 
 radiopharm_bp = Blueprint('radiopharm', __name__, template_folder='templates')
 
-# Default set of pharmaceuticals that each user starts with if none exist.
 DEFAULT_TYPES = [
     ('18F-FDG', 109.8),
     ('18F-PSMA', 109.8),
@@ -27,106 +26,355 @@ DEFAULT_TYPES = [
     ('13N-NH3', 9.96),
 ]
 
+
+def _get_current_set_name(table_mgr, username):
+    """
+    Fetch the pointer from DaySetupTable.
+    Return None if it doesn’t exist.
+    """
+    try:
+        rec = table_mgr.get_entity(DAYSETUP_TABLE, username, "radiopharmaceutical_attribute_set")
+        return rec.get('value')
+    except Exception:
+        return None
+
+
+def _set_current_set_name(table_mgr, username, new_set_name):
+    """
+    Create or update the pointer in DaySetupTable so that
+    RowKey="radiopharmaceutical_attribute_set" → value=<new_set_name>.
+    """
+    entity = {
+        'PartitionKey': username,
+        'RowKey': "radiopharmaceutical_attribute_set",
+        'value': new_set_name
+    }
+    # Try to upload (this will create or overwrite).
+    try:
+        table_mgr.upload_batch_to_table(DAYSETUP_TABLE, [entity])
+    except Exception as e:
+        current_app.logger.error("Failed to set current attribute set: %s", e)
+        raise
+
+
+def _ensure_at_least_one_set(table_mgr, username):
+    """
+    If the user has no attribute‐sets in PHARM_TABLE, create one called "Default".
+    Returns the name of the one-and-only set.
+    """
+    # Query for any existing sets:
+    existing_sets = list(table_mgr.query_entities(
+        PHARM_TABLE,
+        query=f"PartitionKey eq '{username}'"
+    ))
+
+    if not existing_sets:
+        # Nothing exists → build a single "Default" set (rowkey = "Default")
+        default_list = [
+            {
+                'type': pharm_type,
+                'half_life': half_life,
+                'price': "",
+                'time_slots': ["anytime"]
+            }
+            for pharm_type, half_life in sorted(DEFAULT_TYPES)
+        ]
+        new_entity = {
+            'PartitionKey': username,
+            'RowKey': "Default",
+            'pharm_data': json.dumps(default_list)
+        }
+        try:
+            table_mgr.upload_batch_to_table(PHARM_TABLE, [new_entity])
+        except Exception as e:
+            current_app.logger.error("Failed to create Default attribute set: %s", e)
+            flash("Could not create default set. Check logs.", "error")
+            return None
+        return "Default"
+    else:
+        # At least one set already exists. Return the first one’s RowKey.
+        return existing_sets[0]['RowKey']
+
+
 @radiopharm_bp.route('/manage', methods=['GET'])
 @login_required
 def manage():
-    """List all radiopharmaceuticals for the current user."""
-    table_manager = get_table_manager()
-    partition_key = current_user.username
+    """
+    1) Check DaySetupTable for "radiopharmaceutical_attribute_set". If missing, initialize it to "Default".
+    2) Ensure there is at least one set in PHARM_TABLE (named "Default" if none existed).
+    3) Load the pointer from DaySetupTable to know which set is 'current'.
+    4) Load that set’s pharm_data JSON and render it.
+    """
+    table_mgr = get_table_manager()
+    username = current_user.username
 
-    # Query user records.
-    existing_records = list(table_manager.query_entities(
-        PHARM_TABLE,
-        query="PartitionKey eq '{}'".format(partition_key)
-    ))
+    # ── 1) Check DaySetupTable for our pointer. If it doesn't exist, we’ll create "Default" below. ──
+    pointer = _get_current_set_name(table_mgr, username)
+    if pointer is None:
+        # No pointer found at all → we’ll set it to "Default" once the "Default" set exists.
+        pointer = None
 
-    # If no record exists, populate defaults.
-    if not existing_records:
-        records = []
-        for pharm_type, half_life in sorted(DEFAULT_TYPES):
-            # Use a new UUID as row key.
-            row_key = str(uuid.uuid4())
-            records.append({
-                'PartitionKey': partition_key,
-                'RowKey': row_key,
-                'type': pharm_type,
-                'half_life': half_life,  # New half life parameter (in mins)
-                'price': "",
-                'time_slots': json.dumps(["anytime"])  # Default time slot stored as JSON.
-            })
+    # ── 2) Ensure at least one attribute‐set exists in PHARM_TABLE; get its name. ──
+    default_set_name = _ensure_at_least_one_set(table_mgr, username)
+    if default_set_name is None:
+        # If we failed to create a default, just bail out with an empty page.
+        return render_template('radiopharmaceutical.html',
+                               current_set="",
+                               all_sets=[],
+                               records=[])
+
+    # If there was no pointer, or if it pointed to something that no longer exists, reset to default
+    if pointer is None:
+        pointer = default_set_name
         try:
-            table_manager.upload_batch_to_table(PHARM_TABLE, records)
-            existing_records = list(table_manager.query_entities(
-                PHARM_TABLE,
-                query="PartitionKey eq '{}'".format(partition_key)
-            ))
-        except Exception as e:
-            current_app.logger.error("Failed to prefill pharmaceutical data: %s", e)
-            flash("Failed to prefill data. Please check the logs.", "error")
-
-    # Convert JSON time_slots string into a list for each record.
-    records = []
-    for rec in existing_records:
-        if 'time_slots' in rec:
+            _set_current_set_name(table_mgr, username, pointer)
+        except Exception:
+            # Log already happened in helper; continue anyway
+            pass
+    else:
+        # If pointer exists but the referenced set is gone, reset it.
+        try:
+            _ = table_mgr.get_entity(PHARM_TABLE, username, pointer)
+        except Exception:
+            # The set named <pointer> is missing. Reset to default_set_name.
+            pointer = default_set_name
             try:
-                rec['time_slots'] = json.loads(rec['time_slots'])
+                _set_current_set_name(table_mgr, username, pointer)
             except Exception:
-                rec['time_slots'] = []
-        else:
-            rec['time_slots'] = []
-        records.append(rec)
+                pass
 
-    return render_template('radiopharmaceutical.html', records=records)
+    # ── 3) Now 'pointer' is guaranteed to be a valid set name. Fetch all set-names. ──
+    all_sets_entities = list(table_mgr.query_entities(
+        PHARM_TABLE,
+        query=f"PartitionKey eq '{username}'"
+    ))
+    all_set_names = [ent['RowKey'] for ent in all_sets_entities]
+
+    # ── 4) Load the JSON blob for the current set, parse it. ──
+    try:
+        set_entity = table_mgr.get_entity(PHARM_TABLE, username, pointer)
+        raw_json = set_entity.get('pharm_data', '[]')
+        pharm_list = json.loads(raw_json)
+    except Exception:
+        pharm_list = []
+
+    # Ensure each 'time_slots' is a list
+    for item in pharm_list:
+        if 'time_slots' in item and not isinstance(item['time_slots'], list):
+            try:
+                item['time_slots'] = json.loads(item['time_slots'])
+            except Exception:
+                item['time_slots'] = []
+
+    return render_template(
+        'radiopharmaceutical.html',
+        current_set=pointer,
+        all_sets=all_set_names,
+        records=pharm_list
+    )
+
+
+@radiopharm_bp.route('/manage/change_set', methods=['POST'])
+@login_required
+def change_set():
+    """
+    User picked a different set from the dropdown.
+    Update DaySetupTable so that current = selected.
+    """
+    table_mgr = get_table_manager()
+    username = current_user.username
+    selected = request.form.get('attribute_set_selector')
+
+    if not selected:
+        flash("No set selected.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    # Verify it actually exists
+    try:
+        _ = table_mgr.get_entity(PHARM_TABLE, username, selected)
+    except Exception:
+        flash("That set no longer exists.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    try:
+        _set_current_set_name(table_mgr, username, selected)
+        flash(f"Switched to set '{selected}'.", "info")
+    except Exception:
+        flash("Could not switch sets. Check logs.", "error")
+
+    return redirect(url_for('radiopharm.manage'))
+
+
+@radiopharm_bp.route('/manage/clone_set', methods=['POST'])
+@login_required
+def clone_set():
+    table_mgr = get_table_manager()
+    username = current_user.username
+    current = _get_current_set_name(table_mgr, username)
+    new_name = request.form.get('new_set_name', "").strip()
+    if not new_name:
+        flash("New set name cannot be empty.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    # Make sure new_name doesn’t already exist
+    try:
+        maybe = table_mgr.get_entity(PHARM_TABLE, username, new_name)
+    except Exception:
+        maybe = None
+
+    if maybe:
+        flash(f"A set named '{new_name}' already exists.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    # Copy JSON from current
+    try:
+        old_ent = table_mgr.get_entity(PHARM_TABLE, username, current)
+        blob = old_ent.get('pharm_data', '[]')
+    except Exception:
+        flash("Failed to read current set.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    new_entity = {
+        'PartitionKey': username,
+        'RowKey': new_name,
+        'pharm_data': blob
+    }
+    try:
+        table_mgr.upload_batch_to_table(PHARM_TABLE, [new_entity])
+        _set_current_set_name(table_mgr, username, new_name)
+        flash(f"Cloned '{current}' → '{new_name}'.", "success")
+    except Exception as e:
+        current_app.logger.error("Failed to clone set: %s", e)
+        flash("Could not clone set. Check logs.", "error")
+
+    return redirect(url_for('radiopharm.manage'))
+
+
+@radiopharm_bp.route('/manage/rename_set', methods=['POST'])
+@login_required
+def rename_set():
+    table_mgr = get_table_manager()
+    username = current_user.username
+    current = _get_current_set_name(table_mgr, username)
+    new_name = request.form.get('rename_set_name', "").strip()
+    if not new_name:
+        flash("New set name cannot be empty.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    if new_name == current:
+        flash("That is already the current set name.", "info")
+        return redirect(url_for('radiopharm.manage'))
+
+    # Ensure new_name isn’t already taken
+    try:
+        maybe = table_mgr.get_entity(PHARM_TABLE, username, new_name)
+    except Exception:
+        maybe = None
+
+    if maybe:
+        flash(f"A set named '{new_name}' already exists.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    # Read old entity
+    try:
+        old_ent = table_mgr.get_entity(PHARM_TABLE, username, current)
+        blob = old_ent.get('pharm_data', '[]')
+    except Exception:
+        flash("Could not load current set data.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    # Create new entity
+    new_entity = {
+        'PartitionKey': username,
+        'RowKey': new_name,
+        'pharm_data': blob
+    }
+    try:
+        table_mgr.upload_batch_to_table(PHARM_TABLE, [new_entity])
+    except Exception as e:
+        current_app.logger.error("Failed to create renamed set: %s", e)
+        flash("Could not rename (create new).", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    # Delete old entity
+    try:
+        table_mgr.delete_entities(PHARM_TABLE, [old_ent])
+    except Exception as e:
+        current_app.logger.error("Failed to delete old set: %s", e)
+        flash("Renamed new set, but failed to delete old. Remove manually if needed.", "warning")
+
+    # Update pointer
+    try:
+        _set_current_set_name(table_mgr, username, new_name)
+    except Exception:
+        flash("Renamed set, but failed to update pointer. Check logs.", "error")
+
+    flash(f"Renamed '{current}' → '{new_name}'.", "success")
+    return redirect(url_for('radiopharm.manage'))
 
 
 @radiopharm_bp.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_radiopharm():
-    """Display form and create a new radiopharmaceutical."""
-    partition_key = current_user.username
-    table_manager = get_table_manager()
+    table_mgr = get_table_manager()
+    username = current_user.username
+    current_set = _get_current_set_name(table_mgr, username)
+    if not current_set:
+        flash("No current set found.", "error")
+        return redirect(url_for('radiopharm.manage'))
 
     if request.method == 'POST':
-        # Get the submitted form data.
         name = request.form.get('name')
-        # Get the half life in minutes.
         half_life = request.form.get('half_life', "")
         price = request.form.get('price', "")
-        # For multi-select, getlist returns a list of time slots.
         time_slots = request.form.getlist('time_slots')
-        # Generate a unique RowKey.
-        row_key = str(uuid.uuid4())
 
-        entity = {
-            'PartitionKey': partition_key,
-            'RowKey': row_key,
-            'type': name,  # Store the pharmaceutical name.
-            'half_life': half_life,  # Store the half life (mins)
+        try:
+            ent = table_mgr.get_entity(PHARM_TABLE, username, current_set)
+            pharm_list = json.loads(ent.get('pharm_data', '[]'))
+        except Exception:
+            pharm_list = []
+
+        pharm_list.append({
+            'type': name,
+            'half_life': half_life,
             'price': price,
-            'time_slots': json.dumps(time_slots)
+            'time_slots': time_slots
+        })
+
+        updated_ent = {
+            'PartitionKey': username,
+            'RowKey': current_set,
+            'pharm_data': json.dumps(pharm_list)
         }
         try:
-            table_manager.upload_batch_to_table(PHARM_TABLE, [entity])
-            flash("New radiopharmaceutical added successfully.")
+            table_mgr.upload_batch_to_table(PHARM_TABLE, [updated_ent])
+            flash("New radiopharmaceutical added to set.", "success")
         except Exception as e:
-            current_app.logger.error("Failed to add radiopharmaceutical: %s", e)
-            flash("Failed to add radiopharmaceutical.", "error")
+            current_app.logger.error("Failed to add item: %s", e)
+            flash("Could not add radiopharmaceutical.", "error")
+
         return redirect(url_for('radiopharm.manage'))
 
     return render_template('add_radiopharm.html')
 
 
-@radiopharm_bp.route('/edit/<row_key>', methods=['GET', 'POST'])
+@radiopharm_bp.route('/edit/<int:index>', methods=['GET', 'POST'])
 @login_required
-def edit_radiopharm(row_key):
-    """Edit an existing radiopharmaceutical."""
-    partition_key = current_user.username
-    table_manager = get_table_manager()
+def edit_radiopharm(index):
+    table_mgr = get_table_manager()
+    username = current_user.username
+    current_set = _get_current_set_name(table_mgr, username)
 
-    # Retrieve the record.
-    record = table_manager.get_entity(PHARM_TABLE, partition_key, row_key)
-    if not record:
-        flash("Radiopharmaceutical not found.", "error")
+    try:
+        ent = table_mgr.get_entity(PHARM_TABLE, username, current_set)
+        pharm_list = json.loads(ent.get('pharm_data', '[]'))
+    except Exception:
+        flash("Failed to load current set.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    if index < 0 or index >= len(pharm_list):
+        flash("Invalid item index.", "error")
         return redirect(url_for('radiopharm.manage'))
 
     if request.method == 'POST':
@@ -135,45 +383,60 @@ def edit_radiopharm(row_key):
         price = request.form.get('price', "")
         time_slots = request.form.getlist('time_slots')
 
-        # Update fields while keeping RowKey unchanged.
-        record['type'] = name
-        record['half_life'] = half_life  # Update half life
-        record['price'] = price
-        record['time_slots'] = json.dumps(time_slots)
+        pharm_list[index] = {
+            'type': name,
+            'half_life': half_life,
+            'price': price,
+            'time_slots': time_slots
+        }
+
+        updated_ent = {
+            'PartitionKey': username,
+            'RowKey': current_set,
+            'pharm_data': json.dumps(pharm_list)
+        }
         try:
-            table_manager.upload_batch_to_table(PHARM_TABLE, [record])
-            flash("Radiopharmaceutical updated successfully.")
+            table_mgr.upload_batch_to_table(PHARM_TABLE, [updated_ent])
+            flash("Radiopharmaceutical updated.", "success")
         except Exception as e:
-            current_app.logger.error("Failed to update radiopharmaceutical: %s", e)
-            flash("Failed to update radiopharmaceutical.", "error")
+            current_app.logger.error("Failed to update item: %s", e)
+            flash("Could not update radiopharmaceutical.", "error")
+
         return redirect(url_for('radiopharm.manage'))
 
-    # On GET, convert the stored JSON time_slots to a Python list.
-    if 'time_slots' in record:
-        try:
-            record['time_slots'] = json.loads(record['time_slots'])
-        except Exception:
-            record['time_slots'] = []
-    else:
-        record['time_slots'] = []
-
-    return render_template('edit_radiopharm.html', record=record)
+    record = pharm_list[index]
+    return render_template('edit_radiopharm.html', record=record, index=index)
 
 
-@radiopharm_bp.route('/delete/<row_key>', methods=['POST'])
+@radiopharm_bp.route('/delete/<int:index>', methods=['POST'])
 @login_required
-def delete_radiopharm(row_key):
-    """Delete the specified radiopharmaceutical."""
-    partition_key = current_user.username
-    table_manager = get_table_manager()
-    record = table_manager.get_entity(PHARM_TABLE, partition_key, row_key)
-    if record:
-        try:
-            table_manager.delete_entities(PHARM_TABLE, [record])
-            flash("Radiopharmaceutical deleted successfully.")
-        except Exception as e:
-            current_app.logger.error("Failed to delete radiopharmaceutical: %s", e)
-            flash("Failed to delete radiopharmaceutical.", "error")
-    else:
-        flash("Radiopharmaceutical not found.", "error")
+def delete_radiopharm(index):
+    table_mgr = get_table_manager()
+    username = current_user.username
+    current_set = _get_current_set_name(table_mgr, username)
+
+    try:
+        ent = table_mgr.get_entity(PHARM_TABLE, username, current_set)
+        pharm_list = json.loads(ent.get('pharm_data', '[]'))
+    except Exception:
+        flash("Failed to load current set.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    if index < 0 or index >= len(pharm_list):
+        flash("Invalid index.", "error")
+        return redirect(url_for('radiopharm.manage'))
+
+    pharm_list.pop(index)
+    updated_ent = {
+        'PartitionKey': username,
+        'RowKey': current_set,
+        'pharm_data': json.dumps(pharm_list)
+    }
+    try:
+        table_mgr.upload_batch_to_table(PHARM_TABLE, [updated_ent])
+        flash("Radiopharmaceutical removed.", "success")
+    except Exception as e:
+        current_app.logger.error("Failed to delete item: %s", e)
+        flash("Could not delete radiopharmaceutical.", "error")
+
     return redirect(url_for('radiopharm.manage'))

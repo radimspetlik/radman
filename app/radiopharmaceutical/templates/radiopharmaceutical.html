@@ -3,8 +3,74 @@
 {% block content %}
 <h2>Manage Radiopharmaceuticals for {{ current_user.username }}</h2>
 
+{# Make sure pure-min.css is included in your base template #}
+
+<div class="pure-g" style="margin-bottom: 1em;">
+  {# ─────────── 1) Current Set Dropdown ─────────── #}
+
+    <form method="POST" action="{{ url_for('radiopharm.change_set') }}" class="pure-form pure-form-inline">
+    <div class="pure-u-1-5">
+      <strong>Current Set:</strong>
+    </div>
+    <div class="pure-u-1-5">
+      <select id="attribute_set_selector" name="attribute_set_selector" onchange="this.form.submit()">
+        {% for set_name in all_sets %}
+          <option value="{{ set_name }}" {% if set_name == current_set %}selected{% endif %}>
+            {{ set_name }}
+          </option>
+        {% endfor %}
+      </select>
+      <noscript>
+        <button type="submit" class="pure-button pure-button-primary">Switch</button>
+      </noscript>
+    </div>
+    </form>
+
+    <div class="pure-u-1-5">
+    </div>
+
+  {# ─────────── 2) Clone Current Set (with prompt) ─────────── #}
+  <div class="pure-u-1-5">
+    <form method="POST" action="{{ url_for('radiopharm.clone_set') }}" id="clone-form" class="pure-form">
+      <input type="hidden" name="new_set_name" id="clone-set-name">
+      <button type="button"
+              class="pure-button pure-button-primary"
+              onclick="
+                const cloneName = prompt('Enter name for the new cloned set:');
+                if (cloneName !== null && cloneName.trim() !== '') {
+                  document.getElementById('clone-set-name').value = cloneName.trim();
+                  document.getElementById('clone-form').submit();
+                }
+              ">
+        Clone Set
+      </button>
+    </form>
+  </div>
+
+  {# ─────────── 3) Rename Current Set (with prompt) ─────────── #}
+  <div class="pure-u-1-5">
+    <form method="POST" action="{{ url_for('radiopharm.rename_set') }}" id="rename-form" class="pure-form">
+      <input type="hidden" name="rename_set_name" id="rename-set-name">
+      <button type="button"
+              class="pure-button pure-button-primary"
+              onclick="
+                const renameName = prompt('Enter new name for the current set:');
+                if (renameName !== null && renameName.trim() !== '') {
+                  document.getElementById('rename-set-name').value = renameName.trim();
+                  document.getElementById('rename-form').submit();
+                }
+              ">
+        Rename Set
+      </button>
+    </form>
+  </div>
+</div>
+
+
+{# ─────────── “Add New Radiopharmaceutical” button ─────────── #}
 <a href="{{ url_for('radiopharm.add_radiopharm') }}" class="btn btn-edit">Add New Radiopharmaceutical</a>
 
+{# ─────────── Table of all records in the current set ─────────── #}
 <table id="radiopharmTable" border="1" cellspacing="0" cellpadding="8">
   <thead>
     <tr>
@@ -12,41 +78,43 @@
       <th>Half Life (mins)</th>
       <th>Price per 1GBq</th>
       <th>Time Slots</th>
+      <th>QC</th>
       <th>Actions</th>
     </tr>
   </thead>
   <tbody>
-    {% for record in records %}
-      <tr>
-        <td>{{ record.type }}</td>
-        <td>{{ record.half_life }}</td>
-        <td>{{ record.price }}</td>
-        <td>{{ record.time_slots | join(', ') }}</td>
-        <td>
-          <div class="action-buttons">
-            <div style="display: flex; gap: 5px; align-items: stretch; width: 100%;">
-              <div style="flex: 1;">
-                <a href="{{ url_for('radiopharm.edit_radiopharm', row_key=record.RowKey) }}" style="display: block; width: 100%;">
-                  <button type="button" class="btn btn-edit" style="width: 100%;">Edit</button>
-                </a>
-              </div>
-              <div style="flex: 1;">
-                <form method="post" action="{{ url_for('radiopharm.delete_radiopharm', row_key=record.RowKey) }}" style="display:inline;">
-                  <button type="submit" onclick="return confirm('Are you sure you want to delete this radiopharmaceutical?');" class="btn btn-delete" style="width: 100%;">Delete</button>
-                </form>
-              </div>
+    {% if records %}
+      {% for record in records %}
+        <tr>
+          <td>{{ record.type }}</td>
+          <td>{{ record.half_life }}</td>
+          <td>{{ record.price }}</td>
+          <td>{{ record.time_slots | join(', ') }}</td>
+          <td>mins + % / abs (act)</td>
+          <td>
+            <div class="action-buttons" style="display: flex; gap: 0.5em;">
+              <a href="{{ url_for('radiopharm.edit_radiopharm', index=loop.index0) }}">
+                <button type="button" class="btn btn-edit">Edit</button>
+              </a>
+              <form method="POST" action="{{ url_for('radiopharm.delete_radiopharm', index=loop.index0) }}">
+                <button type="submit" onclick="return confirm('Are you sure you want to delete this?');"
+                        class="btn btn-delete">
+                  Delete
+                </button>
+              </form>
             </div>
-          </div>
-        </td>
-      </tr>
+          </td>
+        </tr>
+      {% endfor %}
     {% else %}
       <tr>
-        <td colspan="5">No radiopharmaceuticals found.</td>
+        <td colspan="5">No radiopharmaceuticals found in this set.</td>
       </tr>
-    {% endfor %}
+    {% endif %}
   </tbody>
 </table>
 
+{# ─────────── Sort‐by script (unchanged) ─────────── #}
 <script>
 document.addEventListener("DOMContentLoaded", function() {
   const table = document.getElementById("radiopharmTable");
@@ -96,30 +164,26 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
-  // Generic comparer function for other columns.
+  // Generic comparer for other columns.
   const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
   const comparer = (idx, asc) => (a, b) => {
     let v1 = getCellValue(asc ? a : b, idx).trim();
     let v2 = getCellValue(asc ? b : a, idx).trim();
 
-    // Use numeric sort for the Half Life (index 1) and Price (index 2) columns.
+    // Numeric sort for Half Life (1) and Price (2).
     if (idx === 1 || idx === 2) {
       const num1 = parseFloat(v1);
       const num2 = parseFloat(v2);
       if (!isNaN(num1) && !isNaN(num2)) {
         return num1 - num2;
       }
-      // If one cell is empty, push it to the bottom.
       if (v1 === "" && v2 !== "") return 1;
       if (v1 !== "" && v2 === "") return -1;
     }
-
-    // Default to a locale-based string comparison.
     return v1.localeCompare(v2, undefined, { numeric: true });
   };
 
-  // Default sort on page load using our custom pharmaceutical comparator
-  // so that items with a filled price come first and then sorted by name.
+  // Default sort on page load using the custom comparator
   function defaultSort() {
     const tbody = table.querySelector("tbody");
     const rows = Array.from(tbody.querySelectorAll("tr"));
@@ -128,34 +192,27 @@ document.addEventListener("DOMContentLoaded", function() {
     updateSortIndicators(0, true);
   }
 
-  // Attach click event listeners to each header for sorting.
+  // Attach click handlers to each header
   headers.forEach((th, index) => {
     th.addEventListener("click", function() {
-      // If the same column is clicked, toggle the sort order.
       if (currentSortColumn === index) {
         currentSortAsc = !currentSortAsc;
       } else {
         currentSortColumn = index;
         currentSortAsc = true;
       }
-
       const tbody = table.querySelector("tbody");
       const rows = Array.from(tbody.querySelectorAll("tr"));
-
-      // Use the custom comparator for the Pharmaceutical column.
       if (index === 0) {
         rows.sort(pharmaceuticalComparator(currentSortAsc));
       } else {
         rows.sort(comparer(index, currentSortAsc));
       }
-
-      // Reattach the sorted rows.
       rows.forEach(row => tbody.appendChild(row));
       updateSortIndicators(currentSortColumn, currentSortAsc);
     });
   });
 
-  // Apply default sorting when the page loads.
   defaultSort();
 });
 </script>

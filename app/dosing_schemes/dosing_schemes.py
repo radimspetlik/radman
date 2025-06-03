@@ -1,3 +1,4 @@
+import json
 import uuid
 from flask import render_template, request, redirect, url_for, flash, session, Blueprint
 from flask_login import current_user, login_required
@@ -50,7 +51,8 @@ def list_dosing_schemes():
 
     # Get list of radiopharmaceuticals for the user from PHARM_TABLE.
     radiopharms = list(table_manager.query_entities(PHARM_TABLE, f"PartitionKey eq '{user_id}'"))
-    radiopharms_dict = {rec['RowKey']: rec['type'] for rec in radiopharms}
+    radiopharms = json.loads(radiopharms[0].get('pharm_data', '[]'))
+    radiopharms_dict = {rec['type']: rec['type'] for rec in radiopharms}
     schemes = [
         {**scheme, 'Radiopharmaceutical': radiopharms_dict.get(scheme['Radiopharmaceutical'], scheme['Radiopharmaceutical'])}
         for scheme in schemes
