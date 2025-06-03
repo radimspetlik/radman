@@ -8,7 +8,7 @@ from app.table_manager import get_table_manager
 
 def _time_options():
     """Return a list of time strings in 5 minute intervals."""
-    return [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 5)]
+    return [f"{h:02d}:{m:02d}" for h in range(7, 18) for m in range(0, 60, 5)]
 
 patients_bp = Blueprint('patients', __name__, template_folder='templates')
 fernet = get_fernet()
@@ -158,6 +158,9 @@ def edit_patient(row_key):
         surname = request.form.get('surname')
         given_name = request.form.get('given_name')
         identification = request.form.get('identification')
+        admin_time = request.form.get('admin_time')
+        note = request.form.get('note')
+        immobility = request.form.get('immobility')
         try:
             weight = float(request.form.get('weight'))
         except (ValueError, TypeError):
