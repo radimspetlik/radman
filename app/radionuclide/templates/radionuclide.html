@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Radionuclides{% endblock %}
+{% block content %}
+<h2>Manage Radionuclides</h2>
+<a href="{{ url_for('radionuclides.add_radionuclide') }}" class="btn btn-edit">Add New Radionuclide</a>
+<table border="1" cellpadding="5" cellspacing="0">
+  <thead>
+    <tr><th>Name</th><th>Half Life (min)</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+    {% for rad in radionuclides %}
+    <tr>
+      <td>{{ rad.RowKey }}</td>
+      <td>{{ rad.half_life }}</td>
+      <td>
+        <a href="{{ url_for('radionuclides.edit_radionuclide', row_key=rad.RowKey) }}" class="btn btn-edit">Edit</a>
+        <form method="post" action="{{ url_for('radionuclides.delete_radionuclide', row_key=rad.RowKey) }}" style="display:inline;">
+          <button type="submit" class="btn btn-delete" onclick="return confirm('Delete this radionuclide?');">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

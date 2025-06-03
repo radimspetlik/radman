@@ -7,10 +7,13 @@
     <label for="name">Pharmaceutical Name:</label>
     <input type="text" name="name" id="name" required>
   </div>
-  <!-- New Half life input inserted as second row -->
   <div>
-    <label for="half_life">Half life (mins):</label>
-    <input type="number" step="any" name="half_life" id="half_life" required>
+    <label for="radionuclide">Radionuclide:</label>
+    <select name="radionuclide" id="radionuclide" required>
+      {% for rad in radionuclides %}
+        <option value="{{ rad.RowKey }}">{{ rad.RowKey }}</option>
+      {% endfor %}
+    </select>
   </div>
   <div>
     <label>Price per 1GBq:</label>
