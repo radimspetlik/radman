@@ -2,7 +2,7 @@
 {% block title %}Radionuclides{% endblock %}
 {% block content %}
 <h2>Manage Radionuclides</h2>
-<a href="{{ url_for('radionuclides.add_radionuclide') }}" class="btn btn-edit">Add New Radionuclide</a>
+<a href="{{ url_for('radionuclides.add_radionuclide') }}" class="pure-button btn-edit">Add New Radionuclide</a>
 <table border="1" cellpadding="5" cellspacing="0">
   <thead>
     <tr><th>Name</th><th>Half Life (min)</th><th>Actions</th></tr>
@@ -13,10 +13,16 @@
       <td>{{ rad.RowKey }}</td>
       <td>{{ rad.half_life }}</td>
       <td>
-        <a href="{{ url_for('radionuclides.edit_radionuclide', row_key=rad.RowKey) }}" class="btn btn-edit">Edit</a>
-        <form method="post" action="{{ url_for('radionuclides.delete_radionuclide', row_key=rad.RowKey) }}" style="display:inline;">
-          <button type="submit" class="btn btn-delete" onclick="return confirm('Delete this radionuclide?');">Delete</button>
-        </form>
+          <div class="pure-g">
+                <div class="pure-u-3-5">
+                    <a href="{{ url_for('radionuclides.edit_radionuclide', row_key=rad.RowKey) }}" class="pure-button btn-edit">Edit</a>
+                </div>
+                <div class="pure-u-2-5">
+                    <form method="post" action="{{ url_for('radionuclides.delete_radionuclide', row_key=rad.RowKey) }}" class="pure-form pure-form-inline">
+                      <button type="submit" class="pure-button btn-delete" onclick="return confirm('Delete this radionuclide?');">X</button>
+                    </form>
+                </div>
+          </div>
       </td>
     </tr>
     {% endfor %}

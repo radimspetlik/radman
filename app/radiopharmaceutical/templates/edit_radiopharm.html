@@ -2,7 +2,7 @@
 {% block title %}Edit Radiopharmaceutical{% endblock %}
 {% block content %}
 <h2>Edit Radiopharmaceutical</h2>
-<form method="post" action="{{ url_for('radiopharm.edit_radiopharm', row_key=record.RowKey) }}">
+<form method="post" action="{{ url_for('radiopharm.edit_radiopharm', index=index) }}">
   <div>
     <label for="name">Pharmaceutical Name:</label>
     <input type="text" name="name" id="name" value="{{ record.type }}" required>

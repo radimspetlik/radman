@@ -239,7 +239,6 @@ button {
 
 .btn {
   display: inline-block;
-  padding: 8px 16px;
   text-decoration: none;
   color: #fff;
   border: none;
@@ -254,16 +253,23 @@ button {
   opacity: 0.9;
 }
 
+.btn-delete,
+.btn-edit,
+.btn-optimize {
+  color: #fff !important;
+  border-radius: 4px !important;
+}
+
 .btn-edit {
-  background-color: #007bff;
+  background-color: #007bff !important;
 }
 
 .btn-optimize {
-  background-color: #468800;
+  background-color: #468800 !important;
 }
 
 .btn-delete {
-  background-color: #dc3545;
+  background-color: #dc3545 !important;
 }
 
 .checkbox-group {
