@@ -41,6 +41,28 @@
                     {# Options will be populated dynamically #}
                 </select>
             </div>
+            <div>
+                <label for="admin_time">Adm. Time:</label>
+                <select name="admin_time" id="admin_time">
+                    {% for t in time_options %}
+                        <option value="{{ t }}">{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 20px; align-items: flex-start; margin-top: 10px;">
+            <div>
+                <label for="note">Note:</label>
+                <input type="text" name="note" id="note">
+            </div>
+            <div>
+                <label for="immobility">Immobility:</label>
+                <select name="immobility" id="immobility">
+                    <option value="no">No</option>
+                    <option value="yes">Yes</option>
+                </select>
+            </div>
         </div>
 
         <p>
@@ -65,7 +87,7 @@
                     <th>Dose (MBq)</th>
                     <th>Adm. Time</th>
                     <th>Note</th>
-                    <th>Imobility</th>
+                    <th>Immobility</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -85,9 +107,9 @@
                         </td>
                         <td>{{ dosing_scheme_by_rowkey[patient.DosingSchemeID]['Name'] }}</td>
                         <td>{{ "{:.1f}".format(patient.AdministeredDose) }}</td>
-                        <td>not def</td>
-                        <td>some note</td>
-                        <td>yes/no</td>
+                        <td>{{ patient.AdminTime or '' }}</td>
+                        <td>{{ patient.Note or '' }}</td>
+                        <td>{{ 'Yes' if patient.Immobility else 'No' }}</td>
                         <td>
                             <div style="display: flex; gap: 5px; align-items: stretch;">
                                 <div style="flex: 1;">

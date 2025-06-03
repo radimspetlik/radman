@@ -5,6 +5,11 @@ from app.encrypt import get_fernet
 from app.constants import DOSING_SCHEMES_TABLE, PATIENTS_TABLE
 from app.table_manager import get_table_manager
 
+
+def _time_options():
+    """Return a list of time strings in 5 minute intervals."""
+    return [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 5)]
+
 patients_bp = Blueprint('patients', __name__, template_folder='templates')
 fernet = get_fernet()
 
@@ -31,6 +36,12 @@ def manage_patients():
         surname = request.form.get('surname')
         given_name = request.form.get('given_name')
         identification = request.form.get('identification')
+        admin_time = request.form.get('admin_time')
+        note = request.form.get('note', '')
+        immobility = request.form.get('immobility', 'no') == 'yes'
+        admin_time = request.form.get('admin_time')
+        note = request.form.get('note', '')
+        immobility = request.form.get('immobility', 'no') == 'yes'
         try:
             weight = float(request.form.get('weight'))
         except (ValueError, TypeError):
@@ -72,7 +83,10 @@ def manage_patients():
             'Identification': encrypted_identification,
             'Weight': weight,
             'DosingSchemeID': dosing_scheme_id,
-            'AdministeredDose': administered_dose
+            'AdministeredDose': administered_dose,
+            'AdminTime': admin_time,
+            'Note': note,
+            'Immobility': immobility
         }
         table_manager.upload_batch_to_table(PATIENTS_TABLE, [patient_entity])
         flash("Patient added successfully.", "success")
@@ -95,11 +109,14 @@ def manage_patients():
             patient["Identification"] = "Decryption Error"
 
     dosing_schemes = sorted(dosing_schemes, key=lambda x: x['Name'])
-    return render_template("patients.html",
-                           dosing_schemes=dosing_schemes,
-                           available_radiopharmaceuticals=available_rads,
-                           patients=patients_list,
-                           dosing_scheme_by_rowkey=dosing_scheme_by_rowkey)
+    return render_template(
+        "patients.html",
+        dosing_schemes=dosing_schemes,
+        available_radiopharmaceuticals=available_rads,
+        patients=patients_list,
+        dosing_scheme_by_rowkey=dosing_scheme_by_rowkey,
+        time_options=_time_options()
+    )
 
 
 @login_required
@@ -176,15 +193,22 @@ def edit_patient(row_key):
         patient['Weight'] = weight
         patient['DosingSchemeID'] = dosing_scheme_id
         patient['AdministeredDose'] = administered_dose
+        patient['AdminTime'] = admin_time
+        patient['Note'] = note
+        patient['Immobility'] = immobility
 
         table_manager.upload_batch_to_table(PATIENTS_TABLE, [patient])
         flash("Patient updated successfully.", "success")
         return redirect(url_for('patients.manage_patients'))
 
-    return render_template("edit_patient.html", patient=patient,
-                           dosing_schemes=dosing_schemes,
-                           available_radiopharmaceuticals=available_rads,
-                           current_radiopharmaceutical=current_rad)
+    return render_template(
+        "edit_patient.html",
+        patient=patient,
+        dosing_schemes=dosing_schemes,
+        available_radiopharmaceuticals=available_rads,
+        current_radiopharmaceutical=current_rad,
+        time_options=_time_options()
+    )
 
 
 @login_required

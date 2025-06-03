@@ -44,6 +44,28 @@
                     {# Options will be populated via JavaScript #}
                 </select>
             </div>
+            <div>
+                <label for="admin_time">Adm. Time:</label>
+                <select name="admin_time" id="admin_time">
+                    {% for t in time_options %}
+                        <option value="{{ t }}" {% if patient.AdminTime==t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 20px; align-items: flex-start; margin-top: 10px;">
+            <div>
+                <label for="note">Note:</label>
+                <input type="text" name="note" id="note" value="{{ patient.Note }}">
+            </div>
+            <div>
+                <label for="immobility">Immobility:</label>
+                <select name="immobility" id="immobility">
+                    <option value="no" {% if not patient.Immobility %}selected{% endif %}>No</option>
+                    <option value="yes" {% if patient.Immobility %}selected{% endif %}>Yes</option>
+                </select>
+            </div>
         </div>
 
         <p>
