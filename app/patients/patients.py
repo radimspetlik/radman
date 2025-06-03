@@ -2,7 +2,12 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 import uuid
 from flask_login import login_required, current_user
 from app.encrypt import get_fernet
-from app.constants import DOSING_SCHEMES_TABLE, PATIENTS_TABLE
+import json
+from app.constants import (
+    DOSING_SCHEMES_TABLE,
+    PATIENTS_TABLE,
+    DAYSETUP_TABLE,
+)
 from app.table_manager import get_table_manager
 
 
@@ -14,11 +19,74 @@ patients_bp = Blueprint('patients', __name__, template_folder='templates')
 fernet = get_fernet()
 
 
+def _get_current_set_name(table_mgr, username):
+    try:
+        rec = table_mgr.get_entity(DAYSETUP_TABLE, username, "patient_set")
+        return rec.get("value")
+    except Exception:
+        return None
+
+
+def _set_current_set_name(table_mgr, username, new_name):
+    entity = {
+        "PartitionKey": username,
+        "RowKey": "patient_set",
+        "value": new_name,
+    }
+    table_mgr.upload_batch_to_table(DAYSETUP_TABLE, [entity])
+
+
+def _ensure_at_least_one_set(table_mgr, username):
+    sets = list(
+        table_mgr.query_entities(PATIENTS_TABLE, f"PartitionKey eq '{username}'")
+    )
+    if not sets:
+        entity = {
+            "PartitionKey": username,
+            "RowKey": "Default",
+            "patient_data": json.dumps([]),
+        }
+        try:
+            table_mgr.upload_batch_to_table(PATIENTS_TABLE, [entity])
+        except Exception:
+            return None
+        return "Default"
+    return sets[0]["RowKey"]
+
+
 @login_required
 @patients_bp.route('/patients', methods=['GET', 'POST'])
 def manage_patients():
     user_id = current_user.username
     table_manager = get_table_manager()
+
+    current_set = _get_current_set_name(table_manager, user_id)
+    default_set = _ensure_at_least_one_set(table_manager, user_id)
+    if default_set is None:
+        return render_template('patients.html', patients=[], dosing_schemes=[],
+                               available_radiopharmaceuticals=[],
+                               dosing_scheme_by_rowkey={}, time_options=_time_options(),
+                               current_set="", all_sets=[])
+    if current_set is None:
+        current_set = default_set
+        try:
+            _set_current_set_name(table_manager, user_id, current_set)
+        except Exception:
+            pass
+    else:
+        try:
+            table_manager.get_entity(PATIENTS_TABLE, user_id, current_set)
+        except Exception:
+            current_set = default_set
+            try:
+                _set_current_set_name(table_manager, user_id, current_set)
+            except Exception:
+                pass
+
+    all_sets_entities = list(
+        table_manager.query_entities(PATIENTS_TABLE, f"PartitionKey eq '{user_id}'")
+    )
+    all_set_names = [ent['RowKey'] for ent in all_sets_entities]
 
     # Retrieve available dosing schemes for the current user.
     dosing_schemes = list(
@@ -74,9 +142,7 @@ def manage_patients():
         encrypted_given_name = fernet.encrypt(given_name.encode()).decode()
         encrypted_identification = fernet.encrypt(identification.encode()).decode()
 
-        # Build the patient record.
         patient_entity = {
-            'PartitionKey': user_id,
             'RowKey': str(uuid.uuid4()),
             'Surname': encrypted_surname,
             'GivenName': encrypted_given_name,
@@ -86,16 +152,29 @@ def manage_patients():
             'AdministeredDose': administered_dose,
             'AdminTime': admin_time,
             'Note': note,
-            'Immobility': immobility
+            'Immobility': immobility,
         }
-        table_manager.upload_batch_to_table(PATIENTS_TABLE, [patient_entity])
+        try:
+            set_entity = table_manager.get_entity(PATIENTS_TABLE, user_id, current_set)
+            patient_list = json.loads(set_entity.get('patient_data', '[]'))
+        except Exception:
+            patient_list = []
+        patient_list.append(patient_entity)
+        updated_ent = {
+            'PartitionKey': user_id,
+            'RowKey': current_set,
+            'patient_data': json.dumps(patient_list),
+        }
+        table_manager.upload_batch_to_table(PATIENTS_TABLE, [updated_ent])
         flash("Patient added successfully.", "success")
         return redirect(url_for('patients.manage_patients'))
 
-    # GET request: retrieve already added patients.
-    patients_list = list(
-        table_manager.query_entities(PATIENTS_TABLE, f"PartitionKey eq '{user_id}'")
-    )
+    # GET request: retrieve patients from the current set JSON blob.
+    try:
+        set_entity = table_manager.get_entity(PATIENTS_TABLE, user_id, current_set)
+        patients_list = json.loads(set_entity.get('patient_data', '[]'))
+    except Exception:
+        patients_list = []
 
     # Decrypt personal data before sending to the template.
     for patient in patients_list:
@@ -115,21 +194,31 @@ def manage_patients():
         available_radiopharmaceuticals=available_rads,
         patients=patients_list,
         dosing_scheme_by_rowkey=dosing_scheme_by_rowkey,
-        time_options=_time_options()
+        time_options=_time_options(),
+        current_set=current_set,
+        all_sets=all_set_names
     )
 
 
 @login_required
-@patients_bp.route('/patients/edit/<row_key>', methods=['GET', 'POST'])
-def edit_patient(row_key):
+@patients_bp.route('/patients/edit/<int:index>', methods=['GET', 'POST'])
+def edit_patient(index):
     user_id = current_user.username
     table_manager = get_table_manager()
+    current_set = _get_current_set_name(table_manager, user_id)
 
-    # Retrieve the patient record.
-    patient = table_manager.get_entity(PATIENTS_TABLE, user_id, row_key)
-    if not patient:
-        flash("Patient not found.", "error")
+    try:
+        set_entity = table_manager.get_entity(PATIENTS_TABLE, user_id, current_set)
+        patient_list = json.loads(set_entity.get('patient_data', '[]'))
+    except Exception:
+        flash("Failed to load current set.", "error")
         return redirect(url_for('patients.manage_patients'))
+
+    if index < 0 or index >= len(patient_list):
+        flash("Invalid patient index.", "error")
+        return redirect(url_for('patients.manage_patients'))
+
+    patient = patient_list[index]
 
     # Decrypt the patient data.
     try:
@@ -165,13 +254,13 @@ def edit_patient(row_key):
             weight = float(request.form.get('weight'))
         except (ValueError, TypeError):
             flash("Weight must be a number.", "error")
-            return redirect(url_for('patients.edit_patient', row_key=row_key))
+            return redirect(url_for('patients.edit_patient', index=index))
 
         dosing_scheme_id = request.form.get('dosing_scheme')
         dosing_scheme = table_manager.get_entity(DOSING_SCHEMES_TABLE, user_id, dosing_scheme_id)
         if not dosing_scheme:
             flash("Selected dosing scheme not found.", "error")
-            return redirect(url_for('patients.edit_patient', row_key=row_key))
+            return redirect(url_for('patients.edit_patient', index=index))
 
         try:
             dose_value = float(dosing_scheme.get('DoseValue', 0))
@@ -200,7 +289,13 @@ def edit_patient(row_key):
         patient['Note'] = note
         patient['Immobility'] = immobility
 
-        table_manager.upload_batch_to_table(PATIENTS_TABLE, [patient])
+        patient_list[index] = patient
+        updated_ent = {
+            'PartitionKey': user_id,
+            'RowKey': current_set,
+            'patient_data': json.dumps(patient_list),
+        }
+        table_manager.upload_batch_to_table(PATIENTS_TABLE, [updated_ent])
         flash("Patient updated successfully.", "success")
         return redirect(url_for('patients.manage_patients'))
 
@@ -210,21 +305,37 @@ def edit_patient(row_key):
         dosing_schemes=dosing_schemes,
         available_radiopharmaceuticals=available_rads,
         current_radiopharmaceutical=current_rad,
-        time_options=_time_options()
+        time_options=_time_options(),
+        index=index
     )
 
 
 @login_required
-@patients_bp.route('/patients/delete/<row_key>', methods=['POST'])
-def delete_patient(row_key):
+@patients_bp.route('/patients/delete/<int:index>', methods=['POST'])
+def delete_patient(index):
     user_id = current_user.username
     table_manager = get_table_manager()
-    patient = table_manager.get_entity(PATIENTS_TABLE, user_id, row_key)
-    if patient:
-        table_manager.delete_entities(PATIENTS_TABLE, [patient])
-        flash("Patient deleted successfully.", "success")
-    else:
+    current_set = _get_current_set_name(table_manager, user_id)
+
+    try:
+        set_entity = table_manager.get_entity(PATIENTS_TABLE, user_id, current_set)
+        patient_list = json.loads(set_entity.get('patient_data', '[]'))
+    except Exception:
+        flash("Failed to load current set.", "error")
+        return redirect(url_for('patients.manage_patients'))
+
+    if index < 0 or index >= len(patient_list):
         flash("Patient not found.", "error")
+        return redirect(url_for('patients.manage_patients'))
+
+    patient_list.pop(index)
+    updated_ent = {
+        'PartitionKey': user_id,
+        'RowKey': current_set,
+        'patient_data': json.dumps(patient_list),
+    }
+    table_manager.upload_batch_to_table(PATIENTS_TABLE, [updated_ent])
+    flash("Patient deleted successfully.", "success")
     return redirect(url_for('patients.manage_patients'))
 
 
@@ -233,12 +344,143 @@ def delete_patient(row_key):
 def clear_patients():
     user_id = current_user.username
     table_manager = get_table_manager()
-    patients_to_clear = list(
-        table_manager.query_entities(PATIENTS_TABLE, f"PartitionKey eq '{user_id}'")
-    )
-    if patients_to_clear:
-        table_manager.delete_entities(PATIENTS_TABLE, patients_to_clear)
+    current_set = _get_current_set_name(table_manager, user_id)
+    updated_ent = {
+        'PartitionKey': user_id,
+        'RowKey': current_set,
+        'patient_data': json.dumps([]),
+    }
+    try:
+        table_manager.upload_batch_to_table(PATIENTS_TABLE, [updated_ent])
         flash("All patients cleared.", "success")
-    else:
+    except Exception:
         flash("No patients to clear.", "info")
+    return redirect(url_for('patients.manage_patients'))
+
+
+@login_required
+@patients_bp.route('/patients/change_set', methods=['POST'])
+def change_set():
+    table_mgr = get_table_manager()
+    username = current_user.username
+    selected = request.form.get('attribute_set_selector')
+    if not selected:
+        flash('No set selected.', 'error')
+        return redirect(url_for('patients.manage_patients'))
+    try:
+        table_mgr.get_entity(PATIENTS_TABLE, username, selected)
+    except Exception:
+        flash('That set no longer exists.', 'error')
+        return redirect(url_for('patients.manage_patients'))
+    try:
+        _set_current_set_name(table_mgr, username, selected)
+        flash(f"Switched to set '{selected}'.", 'info')
+    except Exception:
+        flash('Could not switch sets. Check logs.', 'error')
+    return redirect(url_for('patients.manage_patients'))
+
+
+@login_required
+@patients_bp.route('/patients/clone_set', methods=['POST'])
+def clone_set():
+    table_mgr = get_table_manager()
+    username = current_user.username
+    current = _get_current_set_name(table_mgr, username)
+    new_name = request.form.get('new_set_name', '').strip()
+    if not new_name:
+        flash('New set name cannot be empty.', 'error')
+        return redirect(url_for('patients.manage_patients'))
+    try:
+        maybe = table_mgr.get_entity(PATIENTS_TABLE, username, new_name)
+    except Exception:
+        maybe = None
+    if maybe:
+        flash(f"A set named '{new_name}' already exists.", 'error')
+        return redirect(url_for('patients.manage_patients'))
+    try:
+        old_ent = table_mgr.get_entity(PATIENTS_TABLE, username, current)
+        blob = old_ent.get('patient_data', '[]')
+    except Exception:
+        flash('Failed to read current set.', 'error')
+        return redirect(url_for('patients.manage_patients'))
+
+    new_entity = {
+        'PartitionKey': username,
+        'RowKey': new_name,
+        'patient_data': blob,
+    }
+    table_mgr.upload_batch_to_table(PATIENTS_TABLE, [new_entity])
+    _set_current_set_name(table_mgr, username, new_name)
+    flash(f"Cloned '{current}' → '{new_name}'.", 'success')
+    return redirect(url_for('patients.manage_patients'))
+
+
+@login_required
+@patients_bp.route('/patients/rename_set', methods=['POST'])
+def rename_set():
+    table_mgr = get_table_manager()
+    username = current_user.username
+    current = _get_current_set_name(table_mgr, username)
+    new_name = request.form.get('rename_set_name', '').strip()
+    if not new_name:
+        flash('New set name cannot be empty.', 'error')
+        return redirect(url_for('patients.manage_patients'))
+    if new_name == current:
+        flash('That is already the current set name.', 'info')
+        return redirect(url_for('patients.manage_patients'))
+    try:
+        maybe = table_mgr.get_entity(PATIENTS_TABLE, username, new_name)
+    except Exception:
+        maybe = None
+    if maybe:
+        flash(f"A set named '{new_name}' already exists.", 'error')
+        return redirect(url_for('patients.manage_patients'))
+    try:
+        old_ent = table_mgr.get_entity(PATIENTS_TABLE, username, current)
+        blob = old_ent.get('patient_data', '[]')
+    except Exception:
+        flash('Could not load current set data.', 'error')
+        return redirect(url_for('patients.manage_patients'))
+
+    new_entity = {
+        'PartitionKey': username,
+        'RowKey': new_name,
+        'patient_data': blob,
+    }
+    try:
+        table_mgr.upload_batch_to_table(PATIENTS_TABLE, [new_entity])
+    except Exception as e:
+        flash('Could not rename (create new).', 'error')
+        return redirect(url_for('patients.manage_patients'))
+
+    try:
+        table_mgr.delete_entities(PATIENTS_TABLE, [old_ent])
+    except Exception:
+        flash('Renamed new set, but failed to delete old.', 'warning')
+
+    _set_current_set_name(table_mgr, username, new_name)
+    flash(f"Renamed '{current}' → '{new_name}'.", 'success')
+    return redirect(url_for('patients.manage_patients'))
+
+
+@login_required
+@patients_bp.route('/patients/delete_set', methods=['POST'])
+def delete_set():
+    table_mgr = get_table_manager()
+    username = current_user.username
+    current = _get_current_set_name(table_mgr, username)
+    if not current:
+        flash('No current set found.', 'error')
+        return redirect(url_for('patients.manage_patients'))
+    all_sets = list(table_mgr.query_entities(PATIENTS_TABLE, f"PartitionKey eq '{username}'"))
+    if len(all_sets) <= 1:
+        flash('Cannot delete the only set.', 'error')
+        return redirect(url_for('patients.manage_patients'))
+    current_ent = table_mgr.get_entity(PATIENTS_TABLE, username, current)
+    table_mgr.delete_entities(PATIENTS_TABLE, [current_ent])
+    remaining = [ent['RowKey'] for ent in all_sets if ent['RowKey'] != current]
+    new_current = remaining[0] if remaining else None
+    if new_current:
+        _set_current_set_name(table_mgr, username, new_current)
+    flash(f"Deleted set '{current}'.", 'success')
     return redirect(url_for('patients.manage_patients'))
