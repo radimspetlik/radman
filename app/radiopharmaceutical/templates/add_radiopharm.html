@@ -38,8 +38,20 @@
         <option value="{{ h00 }}">{{ h00 }}</option>
         <option value="{{ h30 }}">{{ h30 }}</option>
       {% endfor %}
-      <option value="17:00">17:00</option>
+    <option value="17:00">17:00</option>
+  </select>
+  </div>
+  <div>
+    <label for="qc_amount">QC Amount:</label>
+    <input type="number" step="any" name="qc_amount" id="qc_amount" required style="width:80px;">
+    <select name="qc_unit" id="qc_unit">
+      <option value="percent">%</option>
+      <option value="MBq">MBq</option>
     </select>
+  </div>
+  <div>
+    <label for="qc_time">QC Time (min):</label>
+    <input type="number" step="any" name="qc_time" id="qc_time" required>
   </div>
   <button type="submit">Add Radiopharmaceutical</button>
 </form>
