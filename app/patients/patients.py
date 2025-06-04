@@ -382,6 +382,37 @@ def change_set():
 
 
 @login_required
+@patients_bp.route('/patients/new_set', methods=['POST'])
+def new_set():
+    table_mgr = get_table_manager()
+    username = current_user.username
+    new_name = request.form.get('new_set_name', '').strip()
+    if not new_name:
+        flash('New set name cannot be empty.', 'error')
+        return redirect(url_for('patients.manage_patients'))
+    try:
+        maybe = table_mgr.get_entity(PATIENTS_TABLE, username, new_name)
+    except Exception:
+        maybe = None
+    if maybe:
+        flash(f"A set named '{new_name}' already exists.", 'error')
+        return redirect(url_for('patients.manage_patients'))
+
+    entity = {
+        'PartitionKey': username,
+        'RowKey': new_name,
+        'patient_data': json.dumps([]),
+    }
+    try:
+        table_mgr.upload_batch_to_table(PATIENTS_TABLE, [entity])
+        _set_current_set_name(table_mgr, username, new_name)
+        flash(f"Created new set '{new_name}'.", 'success')
+    except Exception:
+        flash('Could not create new set.', 'error')
+    return redirect(url_for('patients.manage_patients'))
+
+
+@login_required
 @patients_bp.route('/patients/clone_set', methods=['POST'])
 def clone_set():
     table_mgr = get_table_manager()
