@@ -48,7 +48,7 @@
                 <label for="admin_time">Adm. Time:</label>
                 <select name="admin_time" id="admin_time">
                     {% for t in time_options %}
-                        <option value="{{ t }}" {% if patient.AdminTime==t %}selected{% endif %}>{{ t }}</option>
+                        <option value="{{ t }}" {% if patient.AdminTime==t or (not patient.AdminTime and t=='N/A') %}selected{% endif %}>{{ t }}</option>
                     {% endfor %}
                 </select>
             </div>
