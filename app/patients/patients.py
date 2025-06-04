@@ -12,8 +12,9 @@ from app.table_manager import get_table_manager
 
 
 def _time_options():
-    """Return a list of time strings in 5 minute intervals."""
-    return [f"{h:02d}:{m:02d}" for h in range(7, 18) for m in range(0, 60, 5)]
+    """Return a list of time strings in 5 minute intervals plus an 'N/A' option."""
+    times = [f"{h:02d}:{m:02d}" for h in range(7, 18) for m in range(0, 60, 5)]
+    return ["N/A"] + times
 
 patients_bp = Blueprint('patients', __name__, template_folder='templates')
 fernet = get_fernet()
