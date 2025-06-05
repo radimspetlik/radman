@@ -27,12 +27,18 @@
     <h2>Add New Dosing Scheme</h2>
     <form method="post" action="{{ url_for('dosing_schemes.add_dosing_scheme') }}" class="dosing-scheme-form">
       <div class="form-group">
-        <label for="radiopharmaceutical">Radiopharmaceutical:</label>
-        <select name="radiopharmaceutical" id="radiopharmaceutical" required class="form-control">
-          <option value="">Select a Radiopharmaceutical</option>
-          {% for rad in radiopharmaceuticals %}
-            <option value="{{ rad.type }}">{{ rad.type }}</option>
+        <label for="radionuclide">Radionuclide:</label>
+        <select name="radionuclide" id="radionuclide" required class="form-control" onchange="updatePharms()">
+          <option value="">Select a Radionuclide</option>
+          {% for rn in radionuclides %}
+            <option value="{{ rn }}">{{ rn }}</option>
           {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="radiopharmaceutical">Radiopharmaceutical:</label>
+        <select name="radiopharmaceutical" id="radiopharmaceutical" required class="form-control" disabled>
+          <option value="">Select a Radiopharmaceutical</option>
         </select>
       </div>
       <div class="form-group">
@@ -73,12 +79,18 @@
     <h2>Edit Dosing Scheme</h2>
     <form method="post" action="{{ url_for('dosing_schemes.edit_dosing_scheme', row_key=scheme.RowKey) }}" class="dosing-scheme-form">
       <div class="form-group">
-        <label for="radiopharmaceutical">Radiopharmaceutical:</label>
-        <select name="radiopharmaceutical" id="radiopharmaceutical" required class="form-control">
-          <option value="">Select a Radiopharmaceutical</option>
-          {% for rad in radiopharmaceuticals %}
-            <option value="{{ rad.type }}" {% if scheme.Radiopharmaceutical == rad.type %}selected{% endif %}>{{ rad.type }}</option>
+        <label for="radionuclide">Radionuclide:</label>
+        <select name="radionuclide" id="radionuclide" required class="form-control" onchange="updatePharms()">
+          <option value="">Select a Radionuclide</option>
+          {% for rn in radionuclides %}
+            <option value="{{ rn }}" {% if scheme.Radionuclide == rn %}selected{% endif %}>{{ rn }}</option>
           {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="radiopharmaceutical">Radiopharmaceutical:</label>
+        <select name="radiopharmaceutical" id="radiopharmaceutical" required class="form-control" disabled>
+          <option value="">Select a Radiopharmaceutical</option>
         </select>
       </div>
       <div class="form-group">
@@ -169,7 +181,34 @@
     </table>
 
     <script>
+      const pharmData = {{ radiopharmaceuticals|tojson }};
+      function updatePharms() {
+        const rnSel = document.getElementById('radionuclide');
+        const rpSel = document.getElementById('radiopharmaceutical');
+        if (!rnSel || !rpSel) return;
+        const rn = rnSel.value;
+        rpSel.innerHTML = '';
+        if (!rn) { rpSel.disabled = true; return; }
+        pharmData.forEach(p => {
+          if (p.radionuclide === rn) {
+            const opt = document.createElement('option');
+            opt.value = p.type;
+            opt.textContent = p.type;
+            rpSel.appendChild(opt);
+          }
+        });
+        rpSel.disabled = false;
+      }
       document.addEventListener("DOMContentLoaded", function() {
+        const rnSel = document.getElementById('radionuclide');
+        {% if action == 'edit' and scheme %}
+        if (rnSel) rnSel.value = "{{ scheme.Radionuclide }}";
+        {% endif %}
+        updatePharms();
+        {% if action == 'edit' and scheme %}
+        const rpSel = document.getElementById('radiopharmaceutical');
+        if (rpSel) rpSel.value = "{{ scheme.Radiopharmaceutical }}";
+        {% endif %}
         const table = document.getElementById("dosingSchemeTable");
         const headers = table.querySelectorAll("th");
 
