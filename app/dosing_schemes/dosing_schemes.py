@@ -14,7 +14,7 @@ dosing_bp = Blueprint('dosing_schemes', __name__, template_folder='templates')
 
 
 def _load_set_data(table_mgr, username):
-    """Return (current_set, all_set_names, pharm_list)"""
+    """Return (current_set, all_set_names, pharm_list, radionuclides)"""
     current = _get_current_set_name(table_mgr, username)
     default = _ensure_at_least_one_set(table_mgr, username)
     if default is None:
@@ -47,7 +47,9 @@ def _load_set_data(table_mgr, username):
     except Exception:
         pharm_list = []
 
-    return current, all_names, pharm_list
+    radionuclides = sorted({rec.get('radionuclide') for rec in pharm_list if rec.get('radionuclide')})
+
+    return current, all_names, pharm_list, radionuclides
 
 
 @dosing_bp.route('/dosing_schemes', methods=['GET'])
@@ -56,7 +58,9 @@ def list_dosing_schemes():
     """Display a list of dosing schemes for the current user."""
     user_id = current_user.username
     table_manager = get_table_manager()
-    # Query dosing schemes using the user id as PartitionKey.
+
+    current_set, all_sets, radiopharms, radionuclides = _load_set_data(table_manager, user_id)
+
     query = f"PartitionKey eq '{user_id}'"
     schemes = list(table_manager.query_entities(DOSING_SCHEMES_TABLE, query))
 
@@ -74,28 +78,32 @@ def list_dosing_schemes():
         batch = []
         for record in prefill_data:
             row_key = str(uuid.uuid4())
+            radionuclide = record[1].split('-')[0]
             entity = {
                 'PartitionKey': user_id,
                 'RowKey': row_key,
                 'Name': record[0],
                 'Radiopharmaceutical': record[1],
+                'Radionuclide': radionuclide,
                 'DoseValue': record[2],
                 'DoseType': record[3],
                 'Uptake1': record[4],
                 'Imaging1': record[5],
                 'Uptake2': record[6],
-                'Imaging2': record[7]
+                'Imaging2': record[7],
+                'SetName': current_set
             }
             batch.append(entity)
         table_manager.upload_batch_to_table(DOSING_SCHEMES_TABLE, batch)
         # Requery after pre-filling.
         schemes = list(table_manager.query_entities(DOSING_SCHEMES_TABLE, query))
 
-    current_set, all_sets, radiopharms = _load_set_data(table_manager, user_id)
+    current_set, all_sets, radiopharms, radionuclides = _load_set_data(table_manager, user_id)
     radiopharms_dict = {rec['type']: rec['type'] for rec in radiopharms}
     schemes = [
         {**scheme, 'Radiopharmaceutical': radiopharms_dict.get(scheme['Radiopharmaceutical'], scheme['Radiopharmaceutical'])}
         for scheme in schemes
+        if scheme.get('SetName', current_set) == current_set
     ]
 
     schemes = sorted(schemes, key=lambda x: x['Name'])
@@ -105,6 +113,7 @@ def list_dosing_schemes():
         current_set=current_set,
         all_sets=all_sets,
         radiopharmaceuticals=radiopharms,
+        radionuclides=radionuclides,
     )
 
 
@@ -142,10 +151,11 @@ def add_dosing_scheme():
     user_id = current_user.username
     table_manager = get_table_manager()
 
-    current_set, all_sets, radiopharms = _load_set_data(table_manager, user_id)
+    current_set, all_sets, radiopharms, radionuclides = _load_set_data(table_manager, user_id)
     radiopharms = sorted(radiopharms, key=lambda x: x.get('type', ''))
 
     if request.method == 'POST':
+        radionuclide = request.form.get('radionuclide')
         radiopharmaceutical = request.form.get('radiopharmaceutical')
         name = request.form.get('name')
         try:
@@ -165,6 +175,8 @@ def add_dosing_scheme():
             'RowKey': row_key,
             'Name': name,
             'Radiopharmaceutical': radiopharmaceutical,
+            'Radionuclide': radionuclide,
+            'SetName': current_set,
             'DoseValue': dose_value,
             'DoseType': dose_type,
             'Uptake1': uptake1,
@@ -182,6 +194,7 @@ def add_dosing_scheme():
         'dosing_schemes.html',
         action='add',
         radiopharmaceuticals=radiopharms,
+        radionuclides=radionuclides,
         current_set=current_set,
         all_sets=all_sets,
     )
@@ -198,10 +211,11 @@ def edit_dosing_scheme(row_key):
         flash("Dosing scheme not found.", "error")
         return redirect(url_for('dosing_schemes.list_dosing_schemes'))
 
-    current_set, all_sets, radiopharms = _load_set_data(table_manager, user_id)
+    current_set, all_sets, radiopharms, radionuclides = _load_set_data(table_manager, user_id)
     radiopharms = sorted(radiopharms, key=lambda x: x.get('type', ''))
 
     if request.method == 'POST':
+        scheme['Radionuclide'] = request.form.get('radionuclide')
         scheme['Radiopharmaceutical'] = request.form.get('radiopharmaceutical')
         scheme['Name'] = request.form.get('name')
         try:
@@ -224,6 +238,7 @@ def edit_dosing_scheme(row_key):
         action='edit',
         scheme=scheme,
         radiopharmaceuticals=radiopharms,
+        radionuclides=radionuclides,
         current_set=current_set,
         all_sets=all_sets,
     )
